@@ -1,0 +1,14 @@
+target/
+Cargo.lock
+
+*.mov
+*.mp4
+*.mkv
+*.avi
+*.mp3
+*.wav
+
+SmartActionsTest/
+
+.DS_Store
+Thumbs.db
