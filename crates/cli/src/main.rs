@@ -1,13 +1,9 @@
 use clap::{Parser, Subcommand};
 
 use smart_actions_core::actions::actions_for_kind;
-
-use smart_actions_core::mime::{
-    detect_kind,
-    detect_mime,
-};
-
+use smart_actions_core::mime::{detect_kind, detect_mime};
 use smart_actions_core::pipeline::run_action;
+use smart_actions_core::resolver::resolve_action;
 
 #[derive(Parser)]
 #[command(name = "smart-actions")]
@@ -26,6 +22,10 @@ enum Commands {
 
     Invoke {
         action: String,
+        file: String,
+    },
+
+    Run {
         file: String,
     },
 }
@@ -52,6 +52,21 @@ fn main() {
 
         Commands::Invoke { action, file } => {
             run_action(&action, &file);
+        }
+
+        Commands::Run { file } => {
+            let action = resolve_action(&file);
+
+            match action {
+                Some(action) => {
+                    println!("Auto action: {}", action);
+                    run_action(action, &file);
+                }
+
+                None => {
+                    println!("No suitable action found for file");
+                }
+            }
         }
     }
 }

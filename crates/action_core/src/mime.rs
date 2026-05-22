@@ -1,39 +1,32 @@
-use mime_guess::from_path;
+use mime_guess;
 
 #[derive(Debug)]
 pub enum FileKind {
-    Image,
     Video,
+    Image,
     Audio,
     Pdf,
-    Archive,
-    Unknown,
+    Other,
 }
 
-pub fn detect_mime(path: &str) -> String {
-    from_path(path)
-        .first_or_octet_stream()
-        .essence_str()
-        .to_string()
+pub fn detect_mime(file: &str) -> String {
+    mime_guess::from_path(file)
+    .first_or_octet_stream()
+    .to_string()
 }
 
-pub fn detect_kind(path: &str) -> FileKind {
-    let mime = detect_mime(path);
+pub fn detect_kind(file: &str) -> FileKind {
+    let mime = detect_mime(file);
 
-    if mime.starts_with("image/") {
-        FileKind::Image
-    } else if mime.starts_with("video/") {
+    if mime.starts_with("video/") {
         FileKind::Video
+    } else if mime.starts_with("image/") {
+        FileKind::Image
     } else if mime.starts_with("audio/") {
         FileKind::Audio
     } else if mime == "application/pdf" {
         FileKind::Pdf
-    } else if mime.contains("zip")
-        || mime.contains("tar")
-        || mime.contains("7z")
-    {
-        FileKind::Archive
     } else {
-        FileKind::Unknown
+        FileKind::Other
     }
 }

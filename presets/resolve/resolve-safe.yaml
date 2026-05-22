@@ -1,0 +1,12 @@
+id: resolve_safe
+
+extension: mov
+
+ffmpeg:
+  args:
+    - -c:v
+    - prores_ks
+    - -profile:v
+    - "1"
+    - -c:a
+    - pcm_s16le

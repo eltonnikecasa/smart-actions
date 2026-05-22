@@ -1,0 +1,12 @@
+app_name: Smart Actions
+
+messages:
+  running_action: Running action
+  input_file: Input file
+  conversion_completed: Conversion completed
+  ffmpeg_error: FFmpeg exited with error
+  ffmpeg_not_found: FFmpeg is not installed
+
+actions:
+  resolve_safe: Convert for DaVinci Resolve
+  proxy: Generate Proxy
