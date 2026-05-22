@@ -1,0 +1,35 @@
+id: compress_h264
+
+enabled: true
+
+category: video
+
+menu:
+  group: video
+  priority: 3
+
+mime:
+  - video/mp4
+  - video/quicktime
+  - video/x-matroska
+
+output:
+  extension: mp4
+  suffix: compressed
+
+ffmpeg:
+  args:
+    - -c:v
+    - libx264
+
+    - -crf
+    - "23"
+
+    - -preset
+    - medium
+
+    - -c:a
+    - aac
+
+    - -b:a
+    - 192k

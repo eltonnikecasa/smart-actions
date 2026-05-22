@@ -1,0 +1,25 @@
+id: extract_audio
+
+enabled: true
+
+category: video
+
+menu:
+  group: audio
+  priority: 2
+
+mime:
+  - video/mp4
+  - video/quicktime
+  - video/x-matroska
+
+output:
+  extension: wav
+  suffix: audio
+
+ffmpeg:
+  args:
+    - -vn
+
+    - -acodec
+    - pcm_s16le

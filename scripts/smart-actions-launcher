@@ -1,0 +1,88 @@
+#!/bin/bash
+
+FILE="$1"
+ACTION="$2"
+
+CLI="/home/enc/Documentos/smart-actions/target/debug/cli"
+
+TMP_LOG=$(mktemp)
+
+DBUS_INFO=$(kdialog \
+  --title "Smart Actions" \
+  --progressbar "Processing file..." 100)
+
+SERVICE=$(echo "$DBUS_INFO" | awk '{print $1}')
+PATH_DIALOG=$(echo "$DBUS_INFO" | awk '{print $2}')
+
+qdbus6 "$SERVICE" "$PATH_DIALOG" \
+  showCancelButton true >/dev/null 2>&1
+
+(
+  "$CLI" invoke "$ACTION" "$FILE" \
+    > "$TMP_LOG" 2>&1
+) &
+
+PID=$!
+
+VALUE=0
+
+while kill -0 $PID 2>/dev/null; do
+
+  sleep 1
+
+  VALUE=$((VALUE + 2))
+
+  if [ "$VALUE" -gt 95 ]; then
+    VALUE=95
+  fi
+
+  qdbus6 "$SERVICE" "$PATH_DIALOG" \
+    Set "" value "$VALUE" >/dev/null 2>&1
+
+  CANCELLED=$(
+    qdbus6 "$SERVICE" "$PATH_DIALOG" \
+      wasCancelled 2>/dev/null
+  )
+
+  if [ "$CANCELLED" = "true" ]; then
+
+    kill $PID 2>/dev/null
+
+    qdbus6 "$SERVICE" "$PATH_DIALOG" \
+      close >/dev/null 2>&1
+
+    kdialog --passivepopup \
+      "Operation cancelled." 3
+
+    rm -f "$TMP_LOG"
+
+    exit 1
+  fi
+done
+
+wait $PID
+
+EXIT_CODE=$?
+
+qdbus6 "$SERVICE" "$PATH_DIALOG" \
+  Set "" value 100 >/dev/null 2>&1
+
+sleep 0.3
+
+qdbus6 "$SERVICE" "$PATH_DIALOG" \
+  close >/dev/null 2>&1
+
+if [ "$EXIT_CODE" = "0" ]; then
+
+  kdialog --textbox "$TMP_LOG" 700 500
+
+  kdialog --passivepopup \
+    "Conversion completed." 3
+
+else
+
+  kdialog --error "$(cat "$TMP_LOG")"
+
+fi
+
+rm -f "$TMP_LOG"

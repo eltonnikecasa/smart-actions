@@ -12,10 +12,30 @@ pub struct Language {
     pub actions: HashMap<String, String>,
 }
 
-pub fn load_language(locale: &str) -> Result<Language, String> {
-    let path = format!("lang/{}.yaml", locale);
+pub fn load_language(
+    locale: &str,
+) -> Result<Language, String> {
 
-    let content = fs::read_to_string(path)
+    println!("Locale requested: {}", locale);
+
+    let config_dir = dirs::config_dir()
+        .ok_or("No config dir found")?;
+
+    println!("Config dir: {:?}", config_dir);
+
+    let lang_dir = config_dir.join(
+        "smart-actions/lang"
+    );
+
+    println!("Lang dir: {:?}", lang_dir);
+
+    let path = lang_dir.join(
+        format!("{}.yaml", locale)
+    );
+
+    println!("Final lang path: {:?}", path);
+
+    let content = fs::read_to_string(&path)
         .map_err(|e| e.to_string())?;
 
     let lang: Language =

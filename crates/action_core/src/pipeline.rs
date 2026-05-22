@@ -1,52 +1,87 @@
-use std::process::{Command, Stdio};
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc,
-};
-use std::thread;
-use std::io::{BufRead, BufReader};
+use std::path::Path;
+use std::process::Command;
 
 use crate::config::load_config;
 use crate::i18n::load_language;
 use crate::presets::load_preset;
-use crate::output::build_output_path;
 
 pub fn run_action(action_id: &str, file: &str) {
     let config = load_config()
-    .expect("Failed to load config");
+        .expect("Failed to load config");
 
     let lang = load_language(&config.locale)
-    .expect("Failed to load language");
+        .expect("Failed to load language");
 
-    println!("{}: {}", lang.messages["running_action"], action_id);
-    println!("{}: {}", lang.messages["input_file"], file);
+    println!(
+        "{}: {}",
+        lang.messages["running_action"],
+        action_id
+    );
+
+    println!(
+        "{}: {}",
+        lang.messages["input_file"],
+        file
+    );
 
     match action_id {
         "resolve_safe" => {
             run_preset(
-                "videos",
-                &format!("{}/resolve/resolve-safe.yaml", config.presets_dir),
-                       action_id,
-                       file,
-                       &lang,
+                &format!(
+                    "{}/resolve/resolve-safe.yaml",
+                    config.presets_dir
+                ),
+                file,
+                &lang,
             );
         }
 
         _ => {
-            println!("Unknown action");
+            println!("Unknown action: {}", action_id);
         }
     }
 }
 
+fn output_path(
+    file: &str,
+    suffix: &str,
+    new_extension: &str,
+) -> String {
+    let path = Path::new(file);
+
+    let parent = path.parent()
+        .unwrap_or(Path::new("."));
+
+    let stem = path
+        .file_stem()
+        .unwrap_or_default()
+        .to_string_lossy();
+
+    let original_extension = path
+        .extension()
+        .unwrap_or_default()
+        .to_string_lossy();
+
+    let filename = if original_extension == new_extension {
+        format!("{}_{}.{}", stem, suffix, new_extension)
+    } else {
+        format!("{}.{}", stem, new_extension)
+    };
+
+    parent
+        .join(filename)
+        .to_string_lossy()
+        .to_string()
+}
+
 fn run_preset(
-    category: &str,
     preset_path: &str,
-    action_id: &str,
     file: &str,
     lang: &crate::i18n::Language,
 ) {
     let preset = match load_preset(preset_path) {
-        Ok(p) => p,
+        Ok(preset) => preset,
+
         Err(e) => {
             println!("Failed to load preset: {}", e);
             return;
@@ -55,15 +90,19 @@ fn run_preset(
 
     println!("Loaded preset: {}", preset.id);
 
-    let output = build_output_path(file, action_id, &preset.extension);
+    let output = output_path(
+        file,
+        &preset.id,
+        &preset.extension,
+    );
 
     println!("Output: {}", output);
 
     let mut cmd = Command::new("ffmpeg");
 
-    cmd.arg("-y")
-    .arg("-i")
-    .arg(file);
+    cmd.arg("-y");
+
+    cmd.arg("-i").arg(file);
 
     for arg in &preset.ffmpeg.args {
         cmd.arg(arg);
@@ -71,56 +110,31 @@ fn run_preset(
 
     cmd.arg(&output);
 
-    cmd.stdout(Stdio::piped());
-    cmd.stderr(Stdio::piped());
+    println!("Executing ffmpeg...");
 
-    let cancel_flag = Arc::new(AtomicBool::new(false));
-    let cancel_flag_ui = cancel_flag.clone();
+    match cmd.status() {
+        Ok(status) => {
+            println!("FFmpeg exit status: {}", status);
 
-    // UI thread simples (terminal fallback por enquanto)
-    thread::spawn(move || {
-        println!("[SmartActions] Running... Press ENTER to cancel");
-        let mut input = String::new();
-        std::io::stdin().read_line(&mut input).ok();
-        cancel_flag_ui.store(true, Ordering::SeqCst);
-    });
-
-    match cmd.spawn() {
-        Ok(mut child) => {
-            let stderr = child.stderr.take().unwrap();
-            let reader = BufReader::new(stderr);
-
-            for line in reader.lines() {
-                if cancel_flag.load(Ordering::SeqCst) {
-                    let _ = child.kill();
-                    println!("Cancelled.");
-                    return;
-                }
-
-                if let Ok(l) = line {
-                    if l.contains("time=") {
-                        println!("{}", l);
-                    }
-                }
-            }
-
-            match child.wait() {
-                Ok(status) if status.success() => {
-                    println!("{}", lang.messages["conversion_completed"]);
-                }
-
-                Ok(_) => {
-                    println!("{}", lang.messages["ffmpeg_error"]);
-                }
-
-                Err(_) => {
-                    println!("{}", lang.messages["ffmpeg_not_found"]);
-                }
+            if status.success() {
+                println!(
+                    "{}",
+                    lang.messages["conversion_completed"]
+                );
+            } else {
+                println!(
+                    "{}",
+                    lang.messages["ffmpeg_error"]
+                );
             }
         }
 
-        Err(_) => {
-            println!("{}", lang.messages["ffmpeg_not_found"]);
+        Err(e) => {
+            println!(
+                "{}: {}",
+                lang.messages["ffmpeg_not_found"],
+                e
+            );
         }
     }
 }

@@ -1,0 +1,32 @@
+id: resolve_safe
+
+enabled: true
+
+category: video
+
+menu:
+  group: video
+  priority: 1
+
+mime:
+  - video/mp4
+  - video/quicktime
+  - video/x-matroska
+
+output:
+  extension: mov
+  suffix: resolve
+
+ffmpeg:
+  args:
+    - -c:v
+    - prores_ks
+
+    - -profile:v
+    - "1"
+
+    - -pix_fmt
+    - yuv422p10le
+
+    - -c:a
+    - pcm_s16le
