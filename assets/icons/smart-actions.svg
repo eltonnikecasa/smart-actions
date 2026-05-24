@@ -1,0 +1,137 @@
+svg
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGradient" x1="120" y1="80" x2="920" y2="920" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#3B82F6"/>
+      <stop offset="50%" stop-color="#6366F1"/>
+      <stop offset="100%" stop-color="#8B5CF6"/>
+    </linearGradient>
+
+    <linearGradient id="glassGradient" x1="200" y1="180" x2="840" y2="840" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.08"/>
+    </linearGradient>
+
+    <filter id="shadow" x="0" y="0" width="1024" height="1024" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="30" stdDeviation="40" flood-color="#000000" flood-opacity="0.25"/>
+    </filter>
+
+    <filter id="blurGlow" x="0" y="0" width="1024" height="1024" filterUnits="userSpaceOnUse">
+      <feGaussianBlur stdDeviation="20"/>
+    </filter>
+  </defs>
+
+  <!-- Fundo principal -->
+  <rect
+    x="72"
+    y="72"
+    width="880"
+    height="880"
+    rx="220"
+    fill="url(#bgGradient)"
+    filter="url(#shadow)"
+    />
+
+  <!-- Brilho superior -->
+  <circle
+    cx="320"
+    cy="260"
+    r="180"
+    fill="#FFFFFF"
+    fill-opacity="0.14"
+    filter="url(#blurGlow)"
+    />
+
+  <!-- Camada glass -->
+  <rect
+    x="110"
+    y="110"
+    width="804"
+    height="804"
+    rx="180"
+    fill="url(#glassGradient)"
+    stroke="#FFFFFF"
+    stroke-opacity="0.15"
+    stroke-width="2"
+    />
+
+  <!-- Núcleo smart -->
+  <rect
+    x="312"
+    y="312"
+    width="400"
+    height="400"
+    rx="96"
+    fill="#FFFFFF"
+    fill-opacity="0.10"
+    stroke="#FFFFFF"
+    stroke-opacity="0.25"
+    stroke-width="10"
+    />
+
+  <!-- Conexões -->
+  <line x1="512" y1="240" x2="512" y2="312" stroke="#FFFFFF" stroke-width="26" stroke-linecap="round"/>
+  <line x1="512" y1="712" x2="512" y2="784" stroke="#FFFFFF" stroke-width="26" stroke-linecap="round"/>
+  <line x1="240" y1="512" x2="312" y2="512" stroke="#FFFFFF" stroke-width="26" stroke-linecap="round"/>
+  <line x1="712" y1="512" x2="784" y2="512" stroke="#FFFFFF" stroke-width="26" stroke-linecap="round"/>
+
+  <!-- Nós -->
+  <circle cx="512" cy="208" r="38" fill="#FFFFFF" fill-opacity="0.95"/>
+  <circle cx="512" cy="816" r="38" fill="#FFFFFF" fill-opacity="0.95"/>
+  <circle cx="208" cy="512" r="38" fill="#FFFFFF" fill-opacity="0.95"/>
+  <circle cx="816" cy="512" r="38" fill="#FFFFFF" fill-opacity="0.95"/>
+
+  <!-- Slider 1 -->
+  <rect
+    x="404"
+    y="418"
+    width="216"
+    height="22"
+    rx="11"
+    fill="#FFFFFF"
+    fill-opacity="0.85"
+    />
+
+  <circle
+    cx="472"
+    cy="429"
+    r="28"
+    fill="#FFFFFF"
+    />
+
+  <!-- Slider 2 -->
+  <rect
+    x="404"
+    y="502"
+    width="216"
+    height="22"
+    rx="11"
+    fill="#FFFFFF"
+    fill-opacity="0.85"
+    />
+
+  <circle
+    cx="560"
+    cy="513"
+    r="28"
+    fill="#FFFFFF"
+    />
+
+  <!-- Slider 3 -->
+  <rect
+    x="404"
+    y="586"
+    width="216"
+    height="22"
+    rx="11"
+    fill="#FFFFFF"
+    fill-opacity="0.85"
+    />
+
+  <circle
+    cx="520"
+    cy="597"
+    r="28"
+    fill="#FFFFFF"
+    />
+  </svg>
