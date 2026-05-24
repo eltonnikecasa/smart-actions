@@ -1,140 +1,193 @@
 use std::path::Path;
+
 use std::process::Command;
 
-use crate::config::load_config;
-use crate::i18n::load_language;
-use crate::presets::load_preset;
+use crate::preset::Preset;
 
-pub fn run_action(action_id: &str, file: &str) {
-    let config = load_config()
-        .expect("Failed to load config");
+use crate::presets::load_all_presets;
 
-    let lang = load_language(&config.locale)
-        .expect("Failed to load language");
+pub fn execute_pipeline(
+    preset: &Preset,
+    inputs: &Vec<String>,
+    output: &str,
+) {
+
+    if inputs.is_empty() {
+
+        panic!(
+            "No input files"
+        );
+    }
 
     println!(
-        "{}: {}",
-        lang.messages["running_action"],
-        action_id
+        "Executing engine: {}",
+        preset.engine
     );
 
-    println!(
-        "{}: {}",
-        lang.messages["input_file"],
-        file
-    );
+    let status = match preset.engine.as_str() {
 
-    match action_id {
-        "resolve_safe" => {
-            run_preset(
-                &format!(
-                    "{}/resolve/resolve-safe.yaml",
-                    config.presets_dir
-                ),
-                file,
-                &lang,
-            );
+        "ffmpeg" => {
+
+            let mut cmd =
+                Command::new("ffmpeg");
+
+            for input in inputs {
+
+                cmd.arg("-i");
+
+                cmd.arg(input);
+            }
+
+            for arg in &preset.command.args {
+
+                cmd.arg(arg);
+            }
+
+            cmd.arg(output);
+
+            cmd.status()
+                .expect(
+                    "Failed to execute ffmpeg"
+                )
+        }
+
+        "img2pdf" => {
+
+            let mut cmd =
+                Command::new("img2pdf");
+
+            for input in inputs {
+
+                cmd.arg(input);
+            }
+
+            cmd.arg("-o");
+
+            cmd.arg(output);
+
+            cmd.status()
+                .expect(
+                    "Failed to execute img2pdf"
+                )
+        }
+
+        "qpdf" => {
+
+            let mut cmd =
+            Command::new("qpdf");
+
+            for arg in &preset.command.args {
+
+                cmd.arg(arg);
+            }
+
+            for input in inputs {
+
+                cmd.arg(input);
+            }
+
+            cmd.arg("--");
+
+            cmd.arg(output);
+
+            cmd.status()
+            .expect(
+                "Failed to execute qpdf"
+            )
+        }
+
+        "ghostscript" => {
+
+            let mut cmd =
+                Command::new("gs");
+
+            for arg in &preset.command.args {
+
+                let value =
+                    arg.replace(
+                        "{output}",
+                        output
+                    );
+
+                cmd.arg(value);
+            }
+
+            for input in inputs {
+
+                cmd.arg(input);
+            }
+
+            cmd.status()
+                .expect(
+                    "Failed to execute ghostscript"
+                )
         }
 
         _ => {
-            println!("Unknown action: {}", action_id);
-        }
-    }
-}
 
-fn output_path(
-    file: &str,
-    suffix: &str,
-    new_extension: &str,
-) -> String {
-    let path = Path::new(file);
-
-    let parent = path.parent()
-        .unwrap_or(Path::new("."));
-
-    let stem = path
-        .file_stem()
-        .unwrap_or_default()
-        .to_string_lossy();
-
-    let original_extension = path
-        .extension()
-        .unwrap_or_default()
-        .to_string_lossy();
-
-    let filename = if original_extension == new_extension {
-        format!("{}_{}.{}", stem, suffix, new_extension)
-    } else {
-        format!("{}.{}", stem, new_extension)
-    };
-
-    parent
-        .join(filename)
-        .to_string_lossy()
-        .to_string()
-}
-
-fn run_preset(
-    preset_path: &str,
-    file: &str,
-    lang: &crate::i18n::Language,
-) {
-    let preset = match load_preset(preset_path) {
-        Ok(preset) => preset,
-
-        Err(e) => {
-            println!("Failed to load preset: {}", e);
-            return;
+            panic!(
+                "Unknown engine: {}",
+                preset.engine
+            );
         }
     };
 
-    println!("Loaded preset: {}", preset.id);
-
-    let output = output_path(
-        file,
-        &preset.id,
-        &preset.extension,
+    println!(
+        "Engine exit status: {:?}",
+        status
     );
 
-    println!("Output: {}", output);
+    if !status.success() {
 
-    let mut cmd = Command::new("ffmpeg");
-
-    cmd.arg("-y");
-
-    cmd.arg("-i").arg(file);
-
-    for arg in &preset.ffmpeg.args {
-        cmd.arg(arg);
+        panic!(
+            "Pipeline execution failed"
+        );
     }
+}
 
-    cmd.arg(&output);
+pub fn run_action(
+    presets_dir: &str,
+    action_id: &str,
+    inputs: &Vec<String>,
+    output: &str,
+) {
 
-    println!("Executing ffmpeg...");
+    let presets =
+        load_all_presets(
+            presets_dir
+        );
 
-    match cmd.status() {
-        Ok(status) => {
-            println!("FFmpeg exit status: {}", status);
+    let preset =
+        presets
+            .into_iter()
+            .find(
+                |p| p.id == action_id
+            )
+            .unwrap_or_else(|| {
 
-            if status.success() {
-                println!(
-                    "{}",
-                    lang.messages["conversion_completed"]
-                );
-            } else {
-                println!(
-                    "{}",
-                    lang.messages["ffmpeg_error"]
-                );
-            }
-        }
+                panic!(
+                    "Preset not found: {}",
+                    action_id
+                )
+            });
 
-        Err(e) => {
-            println!(
-                "{}: {}",
-                lang.messages["ffmpeg_not_found"],
-                e
+    for input in inputs {
+
+        let input_path =
+            Path::new(input);
+
+        if !input_path.exists() {
+
+            panic!(
+                "Input file does not exist: {}",
+                input
             );
         }
     }
+
+    execute_pipeline(
+        &preset,
+        inputs,
+        output,
+    );
 }

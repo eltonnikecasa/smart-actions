@@ -1,0 +1,23 @@
+id: images_to_pdf
+
+enabled: true
+
+min_files: 2
+max_files: 999
+
+engine: img2pdf
+
+menu:
+  group: pdf
+  priority: 2
+
+mime:
+  - image/*
+
+output:
+  extension: pdf
+  preserve_extension: false
+  suffix: merged
+
+command:
+  args: []

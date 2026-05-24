@@ -1,0 +1,36 @@
+id: compress_pdf
+
+enabled: true
+
+min_files: 1
+max_files: 1
+
+engine: ghostscript
+
+menu:
+  group: pdf
+  priority: 1
+
+mime:
+  - application/pdf
+
+output:
+  extension: pdf
+  preserve_extension: false
+  suffix: compressed
+
+command:
+  args:
+    - -sDEVICE=pdfwrite
+
+    - -dCompatibilityLevel=1.4
+
+    - -dPDFSETTINGS=/ebook
+
+    - -dNOPAUSE
+
+    - -dQUIET
+
+    - -dBATCH
+
+    - -sOutputFile={output}

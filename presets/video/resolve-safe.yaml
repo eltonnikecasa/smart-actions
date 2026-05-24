@@ -1,23 +1,25 @@
 id: resolve_safe
 
 enabled: true
+min_files: 1
+max_files: 1
+multi_file: false
 
-category: video
+engine: ffmpeg
 
 menu:
   group: video
   priority: 1
 
 mime:
-  - video/mp4
-  - video/quicktime
-  - video/x-matroska
+  - video/*
 
 output:
   extension: mov
+  preserve_extension: false
   suffix: resolve
 
-ffmpeg:
+command:
   args:
     - -c:v
     - prores_ks

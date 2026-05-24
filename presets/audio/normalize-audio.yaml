@@ -1,9 +1,9 @@
-id: extract_audio
+id: normalize_audio
 
 enabled: true
+
 min_files: 1
 max_files: 1
-multi_file: false
 
 engine: ffmpeg
 
@@ -12,16 +12,14 @@ menu:
   priority: 2
 
 mime:
-  - video/*
+  - audio/*
 
 output:
   extension: wav
-  preserve_extension: false
-  suffix: audio
+  preserve_extension: true
+  suffix: normalized
 
 command:
   args:
-    - -vn
-
-    - -acodec
-    - pcm_s16le
+    - -af
+    - loudnorm

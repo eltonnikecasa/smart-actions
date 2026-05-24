@@ -1,28 +1,25 @@
-id: convert_webp
+id: remove_metadata
 
 enabled: true
+
 min_files: 1
 max_files: 1
-multi_file: false
 
 engine: ffmpeg
 
 menu:
   group: image
-  priority: 1
+  priority: 3
 
 mime:
   - image/*
 
 output:
-  extension: webp
+  extension: png
   preserve_extension: false
-  suffix: webp
+  suffix: clean
 
 command:
   args:
-    - -c:v
-    - libwebp
-
-    - -quality
-    - "85"
+    - -map_metadata
+    - "-1"

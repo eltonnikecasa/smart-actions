@@ -1,4 +1,4 @@
-id: extract_audio
+id: optimize_png
 
 enabled: true
 min_files: 1
@@ -8,20 +8,18 @@ multi_file: false
 engine: ffmpeg
 
 menu:
-  group: audio
+  group: image
   priority: 2
 
 mime:
-  - video/*
+  - image/png
 
 output:
-  extension: wav
+  extension: png
   preserve_extension: false
-  suffix: audio
+  suffix: optimized
 
 command:
   args:
-    - -vn
-
-    - -acodec
-    - pcm_s16le
+    - -compression_level
+    - "100"

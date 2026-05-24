@@ -1,7 +1,14 @@
 #!/bin/bash
 
-FILE="$1"
-ACTION="$2"
+ARGS=("$@")
+
+LAST_INDEX=$((${#ARGS[@]} - 1))
+
+ACTION="${ARGS[$LAST_INDEX]}"
+
+unset 'ARGS[$LAST_INDEX]'
+
+FILES=("${ARGS[@]}")
 
 CLI="/home/enc/Documentos/smart-actions/target/debug/cli"
 
@@ -18,7 +25,7 @@ qdbus6 "$SERVICE" "$PATH_DIALOG" \
   showCancelButton true >/dev/null 2>&1
 
 (
-  "$CLI" invoke "$ACTION" "$FILE" \
+  "$CLI" invoke "$ACTION" "${FILES[@]}" \
     > "$TMP_LOG" 2>&1
 ) &
 
@@ -74,10 +81,8 @@ qdbus6 "$SERVICE" "$PATH_DIALOG" \
 
 if [ "$EXIT_CODE" = "0" ]; then
 
-  kdialog --textbox "$TMP_LOG" 700 500
-
   kdialog --passivepopup \
-    "Conversion completed." 3
+    "Operation completed." 3
 
 else
 

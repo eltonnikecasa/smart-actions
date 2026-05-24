@@ -1,23 +1,25 @@
 id: compress_h264
 
 enabled: true
+min_files: 1
+max_files: 1
+multi_file: false
 
-category: video
+engine: ffmpeg
 
 menu:
   group: video
   priority: 3
 
 mime:
-  - video/mp4
-  - video/quicktime
-  - video/x-matroska
+  - video/*
 
 output:
   extension: mp4
+  preserve_extension: false
   suffix: compressed
 
-ffmpeg:
+command:
   args:
     - -c:v
     - libx264

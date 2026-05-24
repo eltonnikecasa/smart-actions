@@ -1,28 +1,28 @@
-id: convert_webp
+id: resize_large
 
 enabled: true
+
 min_files: 1
 max_files: 1
-multi_file: false
 
 engine: ffmpeg
 
 menu:
   group: image
-  priority: 1
+  priority: 2
 
 mime:
   - image/*
 
 output:
-  extension: webp
+  extension: jpg
   preserve_extension: false
-  suffix: webp
+  suffix: resized
 
 command:
   args:
-    - -c:v
-    - libwebp
+    - -vf
+    - scale='min(1920,iw)':-2
 
-    - -quality
-    - "85"
+    - -q:v
+    - "2"

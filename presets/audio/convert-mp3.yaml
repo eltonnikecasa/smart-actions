@@ -1,27 +1,31 @@
-id: extract_audio
+id: convert_mp3
 
 enabled: true
+
 min_files: 1
 max_files: 1
-multi_file: false
 
 engine: ffmpeg
 
 menu:
   group: audio
-  priority: 2
+  priority: 1
 
 mime:
+  - audio/*
   - video/*
 
 output:
-  extension: wav
+  extension: mp3
   preserve_extension: false
-  suffix: audio
+  suffix: mp3
 
 command:
   args:
     - -vn
 
-    - -acodec
-    - pcm_s16le
+    - -c:a
+    - libmp3lame
+
+    - -b:a
+    - 192k

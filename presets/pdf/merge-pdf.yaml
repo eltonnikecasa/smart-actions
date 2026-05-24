@@ -1,0 +1,25 @@
+id: merge_pdf
+
+enabled: true
+
+min_files: 2
+max_files: 999
+
+engine: qpdf
+
+menu:
+  group: pdf
+  priority: 3
+
+mime:
+  - application/pdf
+
+output:
+  extension: pdf
+  preserve_extension: false
+  suffix: merged
+
+command:
+  args:
+    - --empty
+    - --pages

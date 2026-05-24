@@ -1,0 +1,69 @@
+app_name: "Smart Actions"
+
+ui:
+
+  new: "Novo"
+
+  edit: "Editar"
+
+  delete: "Excluir"
+
+  save: "Salvar"
+
+  cancel: "Cancelar"
+
+  enabled: "Ativado"
+
+  multi_file: "Múltiplos arquivos"
+
+  category: "Categoria"
+
+  output_format: "Formato de saída"
+
+  technical_info: "Informações técnicas"
+
+  arguments: "Argumentos"
+
+  argument_presets: "Presets de argumentos"
+
+  preset_editor: "Editor de Preset"
+
+  display_name: "Nome"
+
+  internal_id: "ID interno"
+
+  image: "Imagem"
+
+  audio: "Áudio"
+
+  video: "Vídeo"
+
+  pdf: "PDF"
+
+actions:
+
+  resolve_safe: "Converter para Edição"
+
+  extract_audio: "Extrair Áudio"
+
+  compress_h264: "Comprimir Vídeo"
+
+  convert_mp3: "Converter para MP3"
+
+  normalize_audio: "Normalizar Áudio"
+
+  compress_audio: "Compressor de Áudio"
+
+  images_to_pdf: "Imagens para PDF"
+
+  merge_pdf: "Mesclar PDFs"
+
+  compress_pdf: "Comprimir PDF"
+
+  convert_webp: "Converter para WebP"
+
+  optimize_png: "Otimizar PNG"
+
+  resize_large: "Redimensionar Imagem"
+
+  remove_metadata: "Remover Metadados"

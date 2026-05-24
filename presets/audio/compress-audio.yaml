@@ -1,0 +1,25 @@
+id: compress_audio
+
+enabled: true
+
+min_files: 1
+max_files: 1
+
+engine: ffmpeg
+
+menu:
+  group: audio
+  priority: 3
+
+mime:
+  - audio/*
+
+output:
+  extension: wav
+  preserve_extension: true
+  suffix: compressed
+
+command:
+  args:
+    - -af
+    - acompressor
