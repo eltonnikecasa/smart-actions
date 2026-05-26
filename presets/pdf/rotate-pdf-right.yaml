@@ -1,0 +1,33 @@
+id: pdf_rotate_right
+
+enabled: true
+
+min_files: 1
+max_files: 1
+
+engine: ghostscript
+
+menu:
+  group: pdf
+  priority: 2
+
+mime:
+  - application/pdf
+
+output:
+  extension: pdf
+  preserve_extension: false
+  suffix: rotated
+
+command:
+  args:
+    - -sDEVICE=pdfwrite
+
+    - -sOutputFile={output}
+
+    - -dAutoRotatePages=/None
+
+    - -c
+    - "<</Orientation 3>> setpagedevice"
+
+    - -f

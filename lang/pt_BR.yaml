@@ -67,3 +67,19 @@ actions:
   resize_large: "Redimensionar Imagem"
 
   remove_metadata: "Remover Metadados"
+
+  rotate_right: "Girar para Direita"
+
+  rotate_left: "Girar para Esquerda"
+
+  rotate_180: "Girar 180°"
+
+  pdf_rotate_right: "Girar PDF para Direita"
+
+  pdf_rotate_left: "Girar PDF para Esquerda"
+
+  pdf_rotate_180: "Girar PDF 180°"
+
+  pdf_to_jpg: "Converter PDF para JPG"
+
+  pdf_to_png: "Converter PDF para PNG"

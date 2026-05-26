@@ -26,6 +26,70 @@ pub fn execute_pipeline(
 
     let status = match preset.engine.as_str() {
 
+        "imagemagick" => {
+
+            let mut status = None;
+
+            for input in inputs {
+
+                let input_path =
+                std::path::Path::new(input);
+
+                let stem =
+                input_path
+                .file_stem()
+                .unwrap()
+                .to_string_lossy();
+
+                let parent =
+                input_path
+                .parent()
+                .unwrap();
+
+                let output_path =
+                parent.join(
+                    format!(
+                        "{}_{}.{}",
+                        stem,
+                        preset.output.suffix,
+                        preset.output.extension
+                    )
+                );
+
+                let output_string =
+                output_path
+                .to_string_lossy()
+                .to_string();
+
+                let mut cmd =
+                Command::new("magick");
+
+                cmd.arg(input);
+
+                for arg in &preset.command.args {
+
+                    cmd.arg(arg);
+                }
+
+                cmd.arg(&output_string);
+
+                println!(
+                    "ImageMagick output: {}",
+                    output_string
+                );
+
+                status =
+                Some(
+                    cmd.status()
+                    .expect(
+                        "Failed to execute ImageMagick"
+                    )
+                );
+            }
+
+            status.unwrap()
+        }
+
         "ffmpeg" => {
 
             let mut cmd =
@@ -101,16 +165,18 @@ pub fn execute_pipeline(
             let mut cmd =
                 Command::new("gs");
 
-            for arg in &preset.command.args {
+                for arg in &preset.command.args {
 
-                let value =
+                    let value =
                     arg.replace(
                         "{output}",
                         output
                     );
 
-                cmd.arg(value);
-            }
+                    println!("ARG: {}", value);
+
+                    cmd.arg(value);
+                }
 
             for input in inputs {
 

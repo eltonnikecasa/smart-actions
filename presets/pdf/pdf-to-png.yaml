@@ -1,0 +1,27 @@
+id: pdf_to_png
+
+enabled: true
+
+min_files: 1
+max_files: 1
+
+multi_file: false
+
+engine: imagemagick
+
+menu:
+  group: pdf
+  priority: 11
+
+mime:
+  - application/pdf
+
+output:
+  extension: png
+  preserve_extension: false
+  suffix: converted
+
+command:
+  args:
+    - -density
+    - "300"

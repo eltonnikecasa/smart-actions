@@ -1,0 +1,25 @@
+id: rotate_left
+
+enabled: true
+min_files: 1
+max_files: 999
+multi_file: true
+
+engine: imagemagick
+
+menu:
+  group: image
+  priority: 21
+
+mime:
+  - image/*
+
+output:
+  extension: jpg
+  preserve_extension: true
+  suffix: rotated
+
+command:
+  args:
+    - -rotate
+    - "-90"
