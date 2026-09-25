@@ -10,7 +10,11 @@ unset 'ARGS[$LAST_INDEX]'
 
 FILES=("${ARGS[@]}")
 
-CLI="/home/enc/Documentos/smart-actions/target/debug/cli"
+CLI="$(dirname -- "$(readlink -f -- "$0")")/smart-actions"
+if [[ ! -x "$CLI" ]]; then
+  printf 'Smart Actions CLI not found: %s\n' "$CLI" >&2
+  exit 1
+fi
 
 TMP_LOG=$(mktemp)
 

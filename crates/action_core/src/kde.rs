@@ -166,9 +166,17 @@ fn generate_menu_for_mime(
             "%f"
         };
 
+        let launcher = dirs::data_dir()
+            .unwrap()
+            .join("smart-actions/bin/smart-actions-launcher")
+            .to_string_lossy()
+            .replace('\\', "\\\\")
+            .replace('"', "\\\"");
+
         desktop.push_str(
             &format!(
-                "Exec=/home/enc/Documentos/smart-actions/scripts/smart-actions-launcher {} {}\n\n",
+                "Exec=\"{}\" {} {}\n\n",
+                launcher,
                 file_arg,
                 preset.id
             )

@@ -1,5 +1,15 @@
 # Smart Actions
 
+## Installation and maintenance
+
+Install the current `main` branch with:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/eltonnikecasa/smart-actions/main/smart-actions-governor.sh | bash
+```
+
+The installed `smart-actions` command provides `install`, `update`, `check`, `repair`, `doctor`, `version`, and `uninstall`. KDE Plasma with Dolphin has service menu integration; other desktops can use the administration commands, while file manager integration is not yet available. Dialogs use `kdialog` on KDE, `zenity` when available, and otherwise the terminal.
+
 Smart Actions is a modern Linux automation system focused on fast media workflows, desktop integration, and configurable file actions.
 
 The project provides a lightweight action engine capable of processing files through reusable presets, allowing users to create contextual actions for videos, audio, images, PDFs, and more.

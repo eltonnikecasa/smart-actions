@@ -39,6 +39,14 @@ enum Commands {
     },
 
     GenerateKdeMenu,
+
+    Install,
+    Update,
+    Check,
+    Repair,
+    Doctor,
+    Version,
+    Uninstall,
 }
 
 fn main() {
@@ -174,6 +182,32 @@ fn main() {
         Commands::GenerateKdeMenu => {
 
             generate_kde_menu();
+        }
+
+        command @ (Commands::Install | Commands::Update | Commands::Check | Commands::Repair | Commands::Doctor | Commands::Version | Commands::Uninstall) => {
+            let action = match command {
+                Commands::Install => "install",
+                Commands::Update => "update",
+                Commands::Check => "check",
+                Commands::Repair => "repair",
+                Commands::Doctor => "doctor",
+                Commands::Version => "version",
+                Commands::Uninstall => "uninstall",
+                _ => unreachable!(),
+            };
+            let data_home = std::env::var_os("XDG_DATA_HOME")
+                .map(std::path::PathBuf::from)
+                .or_else(|| std::env::var_os("HOME").map(|home| std::path::PathBuf::from(home).join(".local/share")))
+                .expect("Could not determine user data directory");
+            let governor = data_home.join("smart-actions/smart-actions-governor.sh");
+            let status = std::process::Command::new("bash")
+                .arg(governor)
+                .arg(action)
+                .status()
+                .expect("Could not start Smart Actions Governor");
+            if !status.success() {
+                std::process::exit(status.code().unwrap_or(1));
+            }
         }
     }
 }

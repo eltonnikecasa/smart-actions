@@ -1,6 +1,58 @@
+# Rust: builds e arquivos auxiliares.
 target/
-Cargo.lock
+**/*.rs.bk
+# Cargo.lock deve ser versionado para builds reproduzíveis dos aplicativos.
 
+# Saídas locais de build, empacotamento e instalação (na raiz).
+/build/
+/dist/
+/out/
+/staging/
+/AppDir/
+
+# Credenciais e variáveis locais; preservar modelos compartilháveis.
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+*.pem
+*.key
+*.p12
+*.pfx
+/.secrets/
+/secrets/
+.cargo/credentials
+.cargo/credentials.toml
+
+# Configuração específica da máquina e ferramentas locais.
+/.cargo/config
+/.cargo/config.toml
+/.codex/
+/.agents/
+/.config/
+/.local/
+.idea/
+.vscode/
+.direnv/
+.envrc
+
+# Logs, caches, temporários e backups de editores.
+*.log
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+.cache/
+/tmp/
+/temp/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Mídias locais usadas nos testes (regras já existentes).
 *.mov
 *.mp4
 *.mkv
@@ -10,5 +62,8 @@ Cargo.lock
 
 SmartActionsTest/
 
+# Metadados do sistema operacional.
 .DS_Store
+._*
 Thumbs.db
+Desktop.ini
