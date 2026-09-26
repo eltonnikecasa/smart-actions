@@ -39,7 +39,7 @@ pass 'manifest generation is deterministic and excludes private/build files'
 
 # Reject traversal, absolute, malformed, and duplicate entries.
 declare -A PARSED=()
-for path in '../escape' '/etc/passwd' 'presets/x/../../escape'; do
+for path in '../arquivo' '../../etc/passwd' '/etc/passwd' 'foo/../../../tmp/x' '/home/user/file' 'presets/x/../../escape'; do
     printf '%s  %s\n' "$(printf a%.0s {1..64})" "$path" > "$TMP/bad"
     if manifest_load "$TMP/bad" PARSED; then fail "accepted unsafe path $path"; fi
 done
@@ -59,6 +59,14 @@ REMOTE_MAP[crates/cli/src/main.rs]="$(hash_text rust-changed)"
 manifest_plan 0
 [[ "$BUILD_REQUIRED" == 1 ]] || fail 'Rust change did not trigger a build'
 pass 'new, changed, unchanged, removed, and rebuild classifications'
+for path in Cargo.toml Cargo.lock rust-toolchain.toml crates/cli/src/main.rs; do
+    is_build_path "$path" || fail "missing build trigger: $path"
+done
+for path in scripts/smart-actions-launcher presets/video/a.yaml lang/en_US.yaml crates/action_core/src/kde.rs; do
+    is_menu_path "$path" || fail "missing menu trigger: $path"
+done
+if is_menu_path assets/icons/a.svg; then fail 'icon unnecessarily triggers menu generation'; fi
+pass 'build and KDE integration trigger patterns'
 
 # Repair checks actual bytes on disk, not only recorded manifest values.
 repair_path=presets/video/repair.yaml
@@ -114,7 +122,6 @@ FETCH_PATHS=(assets/icons/bad.svg)
 if (download_paths "$TEST_COMMIT") 2>/dev/null; then fail 'bad SHA-256 transfer passed validation'; fi
 pass 'unchanged files are skipped and checksum mismatch blocks staging'
 
-printf 'All Smart Actions manifest tests passed.\n'
 
 # Apply a data-only update and preserve unchanged bytes, unknown files and user data.
 TMP_DIR="$TMP/apply"
@@ -162,3 +169,21 @@ if (apply_package "$TEST_COMMIT" "$TMP/prior-manifest"); then fail 'integration 
 [[ -x "$BIN_DIR/smart-actions" ]] || fail 'data-only rollback deleted binary'
 cmp "$INSTALLED_MANIFEST" "$TMP/prior-manifest" || fail 'failed update changed metadata'
 pass 'integration failure rolls back data without deleting existing binaries'
+
+# State-write failure after menu generation restores the previous integration too.
+TMP_DIR="$TMP/state-failure"
+mkdir -p "$TMP_DIR" "$STATE_DIR/installed-sha.tmp" "$DATA_HOME/kio/servicemenus"
+printf old-menu > "$DATA_HOME/kio/servicemenus/smart-actions-probe.desktop"
+FETCH_PATHS=(); REMOVED_PATHS=(); BUILD_REQUIRED=0; MENU_REQUIRED=1
+desktop_hint=KDE
+regenerate_kde_menu() {
+    mkdir -p "$TMP_DIR/menu-backup"
+    cp "$DATA_HOME/kio/servicemenus/smart-actions-probe.desktop" "$TMP_DIR/menu-backup/"
+    printf new-menu > "$DATA_HOME/kio/servicemenus/smart-actions-probe.desktop"
+}
+if (apply_package "$TEST_COMMIT" "$INSTALLED_MANIFEST") 2>/dev/null; then fail 'state failure accepted'; fi
+[[ $(cat "$DATA_HOME/kio/servicemenus/smart-actions-probe.desktop") == old-menu ]] || fail 'state failure left new menu installed'
+cmp "$INSTALLED_MANIFEST" "$TMP/prior-manifest" || fail 'state failure changed manifest'
+[[ $(installed_sha) == "$TEST_COMMIT" ]] || fail 'state failure changed commit'
+pass 'state-write failure restores the previous KDE menu and preserves metadata'
+printf 'All Smart Actions manifest tests passed.\n'

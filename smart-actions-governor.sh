@@ -138,7 +138,7 @@ is_build_path() {
     case "$1" in Cargo.toml|Cargo.lock|rust-toolchain.toml|crates/*) return 0 ;; *) return 1 ;; esac
 }
 is_menu_path() {
-    case "$1" in presets/*|lang/*|crates/action_core/src/kde.rs|crates/action_core/src/i18n.rs|crates/action_core/src/config.rs|crates/action_core/src/presets.rs) return 0 ;; *) return 1 ;; esac
+    case "$1" in scripts/smart-actions-launcher|presets/*|lang/*|crates/action_core/src/kde.rs|crates/action_core/src/i18n.rs|crates/action_core/src/config.rs|crates/action_core/src/presets.rs) return 0 ;; *) return 1 ;; esac
 }
 install_path() {
     local rel="$1"
@@ -374,7 +374,8 @@ apply_package() (
     fi
     local staged_manifest="$STATE_DIR/installed-manifest.sha256.tmp" staged_sha="$STATE_DIR/installed-sha.tmp"
     if ! install -m 0644 "$manifest_file" "$staged_manifest" || ! printf '%s\n' "$sha" > "$staged_sha"; then
-        rollback_binaries; rollback_changes; return 1
+        ((link_created == 0)) || rm -f -- "$PUBLIC_BIN/smart-actions"
+        rollback_binaries; rollback_changes; restore_kde_menu; return 1
     fi
     local previous_sha="$TMP_DIR/previous-installed-sha"
     [[ ! -f "$STATE_DIR/installed-sha" ]] || cp -p "$STATE_DIR/installed-sha" "$previous_sha"
@@ -382,7 +383,7 @@ apply_package() (
         rm -f -- "$staged_manifest" "$staged_sha"
         if [[ -f "$previous_sha" ]]; then cp -p "$previous_sha" "$STATE_DIR/installed-sha"; else rm -f -- "$STATE_DIR/installed-sha"; fi
         ((link_created == 0)) || rm -f -- "$PUBLIC_BIN/smart-actions"
-        rollback_binaries; rollback_changes; return 1
+        rollback_binaries; rollback_changes; restore_kde_menu; return 1
     fi
 )
 rollback_binaries() {
