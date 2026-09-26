@@ -15,9 +15,9 @@ pub fn load_config() -> Result<Config, String> {
         .join("smart-actions/config.yaml");
 
     if !path.exists() {
-        let presets = dirs::config_dir()
-            .ok_or("No config dir found")?
-            .join("smart-actions/presets");
+        let presets = dirs::data_dir()
+            .ok_or("No data dir found")?
+            .join("smart-actions/share/presets");
         return Ok(Config {
             locale: "pt_BR".to_string(),
             presets_dir: presets.to_string_lossy().into_owned(),

@@ -41,11 +41,11 @@ pub fn load_language(
     Box<dyn std::error::Error>
 > {
 
-    let path =
-        format!(
-            "lang/{}.yaml",
-            locale
-        );
+    let installed_path = dirs::data_dir()
+        .map(|data| data.join("smart-actions/share/lang").join(format!("{}.yaml", locale)));
+    let path = installed_path
+        .filter(|path| path.is_file())
+        .unwrap_or_else(|| std::path::PathBuf::from(format!("lang/{}.yaml", locale)));
 
     let content =
         std::fs::read_to_string(

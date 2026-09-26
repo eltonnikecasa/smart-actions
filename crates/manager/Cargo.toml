@@ -13,3 +13,4 @@ serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
 
 smart_actions_core = { path = "../action_core" }
+dirs = "5"

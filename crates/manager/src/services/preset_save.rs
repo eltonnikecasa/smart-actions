@@ -1,7 +1,5 @@
 use std::fs;
 
-use std::path::Path;
-
 use crate::models::category::FileCategory;
 
 // Create filesystem-safe IDs.
@@ -47,15 +45,11 @@ pub fn save_preset(
             display_name
         );
 
-    let dir =
-        Path::new(
-            "presets/custom"
-        );
+    let Some(dir) = dirs::config_dir().map(|path| path.join("smart-actions/presets/custom")) else {
+        return;
+    };
 
-    let _ =
-        fs::create_dir_all(
-            dir
-        );
+    let _ = fs::create_dir_all(&dir);
 
     let path =
         dir.join(
@@ -162,11 +156,10 @@ pub fn delete_preset(
         return;
     }
 
-    let path =
-        format!(
-            "presets/custom/{}.yaml",
-            preset_id
-        );
+    let Some(config_dir) = dirs::config_dir() else { return; };
+    let path = config_dir
+        .join("smart-actions/presets/custom")
+        .join(format!("{}.yaml", preset_id));
 
     let _ =
         fs::remove_file(

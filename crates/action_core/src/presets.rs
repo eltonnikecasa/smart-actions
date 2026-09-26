@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 
@@ -12,10 +13,29 @@ pub fn load_all_presets(
 
     let mut presets = Vec::new();
 
+    if let Some(data_dir) = dirs::data_dir() {
+        let bundled = data_dir.join("smart-actions/share/presets");
+        if bundled != Path::new(presets_dir) {
+            visit_dirs(&bundled, &mut presets);
+        }
+    }
+
     visit_dirs(
         Path::new(presets_dir),
         &mut presets,
     );
+
+    // User presets live outside the manifest-owned official distribution tree.
+    if let Some(config_dir) = dirs::config_dir() {
+        let custom_dir = config_dir.join("smart-actions/presets");
+        if custom_dir != Path::new(presets_dir) {
+            visit_dirs(&custom_dir, &mut presets);
+        }
+    }
+
+    // Keep the official version first if legacy config still contains an older copy.
+    let mut seen = HashSet::new();
+    presets.retain(|preset| seen.insert(preset.id.clone()));
 
     presets
 }

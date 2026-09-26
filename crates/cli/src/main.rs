@@ -47,6 +47,7 @@ enum Commands {
     Doctor,
     Version,
     Uninstall,
+    Manifest,
 }
 
 fn main() {
@@ -184,7 +185,7 @@ fn main() {
             generate_kde_menu();
         }
 
-        command @ (Commands::Install | Commands::Update | Commands::Check | Commands::Repair | Commands::Doctor | Commands::Version | Commands::Uninstall) => {
+        command @ (Commands::Install | Commands::Update | Commands::Check | Commands::Repair | Commands::Doctor | Commands::Version | Commands::Uninstall | Commands::Manifest) => {
             let action = match command {
                 Commands::Install => "install",
                 Commands::Update => "update",
@@ -193,6 +194,7 @@ fn main() {
                 Commands::Doctor => "doctor",
                 Commands::Version => "version",
                 Commands::Uninstall => "uninstall",
+                Commands::Manifest => "manifest",
                 _ => unreachable!(),
             };
             let data_home = std::env::var_os("XDG_DATA_HOME")

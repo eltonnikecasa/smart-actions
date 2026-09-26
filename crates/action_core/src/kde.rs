@@ -204,15 +204,13 @@ fn generate_menu_for_mime(
             safe_name
         );
 
-    let target =
-        dirs::home_dir()
-            .unwrap()
-            .join(
-                format!(
-                    ".local/share/kio/servicemenus/{}",
-                    filename
-                )
-            );
+    let target = dirs::data_dir()
+        .unwrap()
+        .join("kio/servicemenus")
+        .join(filename);
+
+    fs::create_dir_all(target.parent().unwrap())
+        .expect("Failed to create KDE service menu directory");
 
     fs::write(&target, desktop)
         .expect("Failed to write menu");
