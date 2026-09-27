@@ -156,16 +156,31 @@ actual bytes; doctor is read-only. Failed application/integration restores prior
 files. Only previously official files are removed; personal presets/configuration
 and KDE files without ownership markers are preserved.
 
-For the first publication, manually:
+Automated publication: development/Codex → local commit → user-authorized push
+of `main` → GitHub Actions → Linux x86_64 build → official package → validation
+→ GitHub Release `sa-<40-character-commit-sha>` → Governor installation.
+Codex must never run `git push`; the user reviews and pushes the local commit.
+The workflow checks out the triggering SHA and uses pinned Rust 1.98.1 with
+`cargo build --release --workspace -j 15 --locked` through `scripts/package.sh`.
+It validates the commit/platform, required paths, every asset hash and absence
+of Rust sources before creating a draft, uploading every individual file from
+`dist/sa-<full-commit>/`, checking uploaded digests and publishing.
 
-1. Make the committed source available in the official GitHub repository.
-2. Enable **Settings → General → Releases → Enable release immutability**.
-3. Create a draft Release with tag `sa-<full-commit>` pointing to that exact
-   commit (use the commit printed by package, not a moving branch).
-4. Upload **every file** from `dist/sa-<full-commit>/`, including the manifest.
-5. Check the assets and publish the Release as the latest stable release.
-   Immutable releases lock the tag and assets, so upload everything before publishing.
-6. Smoke-test the bootstrap on a supported clean client without Rust.
+**One-time administrator prerequisite, before the first push:** enable
+**Settings → General → Releases → Enable release immutability**.
+GitHub applies this setting when the draft is published; it is not a writable
+`immutable` field on the Release API. Managing that setting requires repository
+administration permissions unavailable to this workflow's `GITHUB_TOKEN` with
+`contents: write`. The workflow verifies `immutable: true` after publication and
+fails if it is absent; the Governor continues to reject mutable releases.
+See [GitHub's setup instructions](https://docs.github.com/en/code-security/how-tos/secure-your-supply-chain/establish-provenance-and-integrity/prevent-release-changes).
 
-See [GitHub immutable releases](https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases).
-No package command creates tags, pushes, uploads assets or publishes releases.
+No PAT, custom secret, server-side `gh`, `scp` or manual asset upload is needed.
+Only the runner's automatic `GITHUB_TOKEN` publishes. Clients need no Rust/Cargo:
+the Governor consumes precompiled binaries. Releases for the same SHA are
+serialized, and existing releases/tags are rejected without replacement.
+A failed upload leaves a draft for inspection; after correcting the failure,
+remove only that unpublished draft before rerunning (an existing tag is also
+rejected). Published immutable releases must never be overwritten. Each push
+builds its triggering tip commit, not every ancestor in a multi-commit push.
+`./scripts/package.sh` itself still never creates tags, pushes or publishes.

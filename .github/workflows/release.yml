@@ -1,0 +1,99 @@
+name: Prebuilt Linux release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+# Serialize retries for one commit without cancelling releases for other commits.
+concurrency:
+  group: release-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      RUSTUP_TOOLCHAIN: 1.98.1
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Configure pinned Rust
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal --no-self-update
+          rustc --version
+          cargo --version
+      - name: Build and package official files
+        run: ./scripts/package.sh
+      - name: Validate package and client contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .github/workflows/validate-package.py "dist/sa-$GITHUB_SHA" "$GITHUB_SHA"
+          bash tests/smart-actions-release.sh "dist/sa-$GITHUB_SHA"
+      - name: Upload draft assets and publish immutable release
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea9 # v7.0.1
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const fs = require('fs');
+            const crypto = require('crypto');
+            const {execFileSync} = require('child_process');
+            const sha = process.env.GITHUB_SHA;
+            const tag = `sa-${sha}`;
+            const dir = `dist/${tag}`;
+            const repo = context.repo;
+            execFileSync('python3', ['.github/workflows/validate-package.py', dir, sha], {stdio: 'inherit'});
+            // Refuse existing releases, including partial drafts; never overwrite assets.
+            const releases = await github.paginate(github.rest.repos.listReleases, {...repo, per_page: 100});
+            if (releases.some(r => r.tag_name === tag)) {
+              throw new Error(`Release ${tag} already exists; inspect it instead of overwriting it.`);
+            }
+            try {
+              await github.rest.git.getRef({...repo, ref: `tags/${tag}`});
+              throw new Error(`Tag ${tag} already exists; refusing to reuse it.`);
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            const {data: release} = await github.rest.repos.createRelease({
+              ...repo, tag_name: tag, target_commitish: sha, draft: true,
+              prerelease: false, name: `Smart Actions — Linux x86_64 — ${sha}`,
+              body: `Prebuilt Linux x86_64 distribution for commit ${sha}.`
+            });
+            const names = fs.readdirSync(dir).sort();
+            const digests = new Map();
+            for (const name of names) {
+              const data = fs.readFileSync(`${dir}/${name}`);
+              digests.set(name, `sha256:${crypto.createHash('sha256').update(data).digest('hex')}`);
+              await github.rest.repos.uploadReleaseAsset({
+                ...repo, release_id: release.id, name, data,
+                headers: {'content-type': 'application/octet-stream', 'content-length': data.length}
+              });
+            }
+            const assets = await github.paginate(github.rest.repos.listReleaseAssets, {
+              ...repo, release_id: release.id, per_page: 100
+            });
+            if (assets.length !== names.length || assets.some(a =>
+                a.state !== 'uploaded' || a.digest !== digests.get(a.name))) {
+              throw new Error('Uploaded assets do not match the validated package; leaving draft.');
+            }
+            // Repository release immutability must be enabled by an administrator first.
+            // Do not pass a fictitious immutable flag: GitHub applies repository policy.
+            const {data: published} = await github.rest.repos.updateRelease({
+              ...repo, release_id: release.id, draft: false, make_latest: 'true'
+            });
+            if (published.immutable !== true) {
+              throw new Error('Release is not immutable. Enable repository release immutability. Governor will refuse it.');
+            }
+            const {data: ref} = await github.rest.git.getRef({...repo, ref: `tags/${tag}`});
+            if (ref.object.type !== 'commit' || ref.object.sha !== sha) {
+              throw new Error('Published tag does not point to the triggering commit.');
+            }
