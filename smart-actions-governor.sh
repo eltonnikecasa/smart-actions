@@ -3,7 +3,7 @@ set -Eeuo pipefail
 IFS=$'\n\t'
 
 readonly REPOSITORY="eltonnikecasa/smart-actions"
-readonly BRANCH="main"
+PLATFORM=""
 readonly APP_NAME="Smart Actions"
 COMMAND="${1:-install}"
 if (($#)); then shift; fi
@@ -26,7 +26,7 @@ UPDATE_CONFIRMED=0
 
 cleanup() { [[ -z "$TMP_DIR" ]] || rm -rf -- "$TMP_DIR"; }
 trap cleanup EXIT
-trap 'status=$?; ui_error "Operation failed (exit $status). See terminal output for details."; exit "$status"' ERR
+trap 'status=$?; ui_error "Falha ao executar: $BASH_COMMAND (exit $status). Verifique a mensagem acima."; exit "$status"' ERR
 
 have() { command -v "$1" >/dev/null 2>&1; }
 desktop_hint="${XDG_CURRENT_DESKTOP:-} ${XDG_SESSION_DESKTOP:-} ${DESKTOP_SESSION:-}"
@@ -108,7 +108,7 @@ valid_manifest_path() {
     read -r -a parts <<< "$path"
     for part in "${parts[@]}"; do [[ "$part" != . && "$part" != .. && -n "$part" ]] || return 1; done
     case "$path" in
-        Cargo.toml|Cargo.lock|rust-toolchain.toml|smart-actions-governor.sh|scripts/smart-actions-launcher) return 0 ;;
+        bin/smart-actions|bin/smart-actions-manager|release.txt|Cargo.toml|Cargo.lock|rust-toolchain.toml|smart-actions-governor.sh|scripts/smart-actions-launcher) return 0 ;;
         crates/*/Cargo.toml|crates/*/build.rs|crates/*/src/*.rs) return 0 ;;
         presets/custom/*) return 1 ;;
         assets/icons/*|lang/*.yaml|presets/*/*.yaml) return 0 ;;
@@ -134,15 +134,13 @@ manifest_load() {
     done < "$file"
     (( ${#output_map[@]} > 0 )) || { MANIFEST_ERROR='Manifest contains no distribution files'; return 1; }
 }
-is_build_path() {
-    case "$1" in Cargo.toml|Cargo.lock|rust-toolchain.toml|crates/*) return 0 ;; *) return 1 ;; esac
-}
 is_menu_path() {
-    case "$1" in scripts/smart-actions-launcher|presets/*|lang/*|crates/action_core/src/kde.rs|crates/action_core/src/i18n.rs|crates/action_core/src/config.rs|crates/action_core/src/presets.rs) return 0 ;; *) return 1 ;; esac
+    case "$1" in bin/*|scripts/smart-actions-launcher|presets/*|lang/*|crates/action_core/src/kde.rs|crates/action_core/src/i18n.rs|crates/action_core/src/config.rs|crates/action_core/src/presets.rs) return 0 ;; *) return 1 ;; esac
 }
 install_path() {
     local rel="$1"
     case "$rel" in
+        bin/*) printf '%s/%s\n' "$APP_DIR" "$rel" ;;
         smart-actions-governor.sh) printf '%s\n' "$GOVERNOR" ;;
         scripts/smart-actions-launcher) printf '%s\n' "$BIN_DIR/smart-actions-launcher" ;;
         crates/*|Cargo.toml|Cargo.lock|rust-toolchain.toml) printf '%s/%s\n' "$APP_DIR/source" "$rel" ;;
@@ -154,7 +152,7 @@ ensure_safe_destination() {
     target="$(install_path "$rel")"
     case "$rel" in
         smart-actions-governor.sh) stop="$APP_DIR" ;;
-        scripts/smart-actions-launcher) stop="$BIN_DIR" ;;
+        bin/*|scripts/smart-actions-launcher) stop="$BIN_DIR" ;;
         crates/*|Cargo.toml|Cargo.lock|rust-toolchain.toml) stop="$APP_DIR/source" ;;
         *) stop="$APP_DIR/share" ;;
     esac
@@ -166,33 +164,54 @@ ensure_safe_destination() {
     done
     [[ "$parent" == "$stop" && ! -L "$stop" ]] || die "Refusing unsafe install path: $target"
 }
+detect_platform() {
+    local os arch
+    os="$(uname -s)"; arch="$(uname -m)"
+    case "$os:$arch" in
+        Linux:x86_64|Linux:amd64) PLATFORM=linux-x86_64 ;;
+        *) die "Não existe build do Smart Actions para esta plataforma/arquitetura: $os/$arch" ;;
+    esac
+}
 resolve_remote_sha() {
-    local result
-    result="$(curl --fail --silent --show-error --location --max-time 30 \
-        -H 'Accept: application/vnd.github+json' \
-        "https://api.github.com/repos/$REPOSITORY/commits/$BRANCH")" || return 1
-    printf '%s' "$result" | grep -o '"sha"[[:space:]]*:[[:space:]]*"[0-9a-fA-F]\{40\}"' | sed -n '1p' | cut -d '"' -f 4
+    local url tag
+    url="$(curl --fail --silent --show-error --location --max-time 30 -o /dev/null -w '%{url_effective}' \
+        "https://github.com/$REPOSITORY/releases/latest")" || return 1
+    tag="${url##*/}"
+    [[ "$url" == "https://github.com/$REPOSITORY/releases/tag/$tag" && "$tag" =~ ^sa-([0-9a-f]{40})$ ]] || return 1
+    printf '%s' "${BASH_REMATCH[1]}"
 }
 fetch_raw() {
     local sha="$1" rel="$2" output="$3"
     valid_manifest_path "$rel" || die "Refusing unsafe download path: $rel"
-    curl --fail --silent --show-error --location --max-time 60 \
-        "https://raw.githubusercontent.com/$REPOSITORY/$sha/$rel" -o "$output"
+    curl --fail --silent --show-error --location --max-time 180 \
+        "https://github.com/$REPOSITORY/releases/download/sa-$sha/sha256-${REMOTE_MAP[$rel]}" -o "$output"
 }
 load_remote_manifest() {
-    local sha="$1" output="$2"
+    local sha="$1" output="$2" path metadata
+    metadata="$(curl --fail --silent --show-error --location --max-time 30 \
+        -H 'Accept: application/vnd.github+json' \
+        "https://api.github.com/repos/$REPOSITORY/releases/tags/sa-$sha")" || die 'Release indisponível; não foi possível verificar sua imutabilidade.'
+    # GitHub's formatted JSON: fail closed if the immutable property is absent.
+    printf '%s\n' "$metadata" | grep -E '^[[:space:]]*"immutable"[[:space:]]*:[[:space:]]*true[[:space:]]*,?$' >/dev/null || die 'A Release precisa ser imutável antes da instalação.'
     curl --fail --silent --show-error --location --max-time 30 \
-        "https://raw.githubusercontent.com/$REPOSITORY/$sha/smart-actions-manifest.sha256" -o "$output"
+        "https://github.com/$REPOSITORY/releases/download/sa-$sha/manifest-$PLATFORM.sha256" -o "$output" || die "Não existe distribuição disponível para $PLATFORM na release sa-$sha."
     declare -gA REMOTE_MAP=()
     manifest_load "$output" REMOTE_MAP || die "Invalid published manifest: $MANIFEST_ERROR"
+    for path in "${!REMOTE_MAP[@]}"; do
+        case "$path" in crates/*|Cargo.*|rust-toolchain.toml) die 'Source manifest cannot be installed as a distribution.' ;; esac
+    done
+    for path in bin/smart-actions bin/smart-actions-manager release.txt smart-actions-governor.sh scripts/smart-actions-launcher; do
+        [[ -v REMOTE_MAP["$path"] ]] || die "Incomplete distribution manifest: $path"
+    done
+    [[ "${REMOTE_MAP[release.txt]}" == "$(printf 'commit=%s\nplatform=%s\n' "$sha" "$PLATFORM" | sha256sum | cut -d ' ' -f 1)" ]] || die 'Release identity mismatch.'
 }
 declare -A REMOTE_MAP=() OLD_MAP=()
 NEW_PATHS=() CHANGED_PATHS=() UNCHANGED_PATHS=() REMOVED_PATHS=() CORRUPT_PATHS=() FETCH_PATHS=()
-BUILD_REQUIRED=0 MENU_REQUIRED=0
+MENU_REQUIRED=0
 manifest_plan() {
     local repair="$1" path local_file expected
     NEW_PATHS=() CHANGED_PATHS=() UNCHANGED_PATHS=() REMOVED_PATHS=() CORRUPT_PATHS=() FETCH_PATHS=()
-    BUILD_REQUIRED=0 MENU_REQUIRED=0
+    MENU_REQUIRED=0
     while IFS= read -r path; do
         [[ -n "$path" ]] || continue
         expected="${REMOTE_MAP[$path]}"
@@ -205,13 +224,11 @@ manifest_plan() {
                 if [[ ! -f "$local_file" || -L "$local_file" ]] || [[ "$(sha256_file "$local_file")" != "$expected" ]]; then
                     CORRUPT_PATHS+=("$path")
                     FETCH_PATHS+=("$path")
-                    is_build_path "$path" && BUILD_REQUIRED=1
                     is_menu_path "$path" && MENU_REQUIRED=1
                 fi
             fi
         fi
         if [[ -v OLD_MAP["$path"] && "${OLD_MAP[$path]}" != "$expected" ]] || [[ ! -v OLD_MAP["$path"] ]]; then
-            is_build_path "$path" && BUILD_REQUIRED=1
             is_menu_path "$path" && MENU_REQUIRED=1
         fi
     done < <(printf '%s\n' "${!REMOTE_MAP[@]}" | LC_ALL=C sort)
@@ -219,14 +236,12 @@ manifest_plan() {
         [[ -n "$path" && -v REMOTE_MAP["$path"] ]] && continue
         [[ -n "$path" ]] || continue
         REMOVED_PATHS+=("$path")
-        is_build_path "$path" && BUILD_REQUIRED=1
         is_menu_path "$path" && MENU_REQUIRED=1
     done < <(printf '%s\n' "${!OLD_MAP[@]}" | LC_ALL=C sort)
-    if [[ ! -x "$BIN_DIR/smart-actions" || ! -x "$BIN_DIR/smart-actions-manager" ]]; then BUILD_REQUIRED=1; fi
 }
 manifest_counts() {
-    printf 'Arquivos novos: %d\nArquivos alterados: %d\nArquivos removidos: %d\nRecompilação necessária: %s\n' \
-        "${#NEW_PATHS[@]}" "${#CHANGED_PATHS[@]}" "${#REMOVED_PATHS[@]}" "$([[ "$BUILD_REQUIRED" == 1 ]] && printf Sim || printf Não)"
+    printf 'Arquivos novos: %d\nArquivos alterados: %d\nArquivos removidos: %d\n' \
+        "${#NEW_PATHS[@]}" "${#CHANGED_PATHS[@]}" "${#REMOVED_PATHS[@]}"
 }
 manifest_generate() {
     local root="${1:-${SMART_ACTIONS_PROJECT_ROOT:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)}}" list rel
@@ -266,39 +281,6 @@ download_paths() {
         [[ "$actual" == "$expected" ]] || die "SHA-256 mismatch for downloaded file: $path"
     done
 }
-prepare_build() {
-    local path staged expected
-    BUILD_SOURCE="$TMP_DIR/build-source"
-    mkdir -p "$BUILD_SOURCE"
-    for path in "${!REMOTE_MAP[@]}"; do
-        is_build_path "$path" || continue
-        staged="$TMP_DIR/download/$path"
-        if [[ ! -f "$staged" ]]; then
-            ensure_safe_destination "$path"
-            local existing="$(install_path "$path")"
-            if [[ -f "$existing" && ! -L "$existing" ]] && [[ "$(sha256_file "$existing")" == "${REMOTE_MAP[$path]}" ]]; then
-                mkdir -p -- "$(dirname -- "$BUILD_SOURCE/$path")"
-                cp -- "$existing" "$BUILD_SOURCE/$path"
-            fi
-        fi
-        expected="${REMOTE_MAP[$path]}"
-        if [[ -f "$staged" ]]; then
-            mkdir -p -- "$(dirname -- "$BUILD_SOURCE/$path")"
-            install -m 0644 "$staged" "$BUILD_SOURCE/$path"
-        elif [[ ! -f "$BUILD_SOURCE/$path" || -L "$BUILD_SOURCE/$path" ]] || [[ "$(sha256_file "$BUILD_SOURCE/$path")" != "$expected" ]]; then
-            staged="$TMP_DIR/download/$path"
-            mkdir -p -- "$(dirname -- "$staged")"
-            FETCH_PATHS+=("$path")
-            fetch_raw "$REMOTE_SHA" "$path" "$staged"
-            [[ "$(sha256_file "$staged")" == "$expected" ]] || die "SHA-256 mismatch for downloaded build file: $path"
-            mkdir -p -- "$(dirname -- "$BUILD_SOURCE/$path")"
-            install -m 0644 "$staged" "$BUILD_SOURCE/$path"
-        fi
-    done
-    ui_progress 'Compilando versão de distribuição'
-    (cd "$BUILD_SOURCE" && cargo build --release --workspace -j 15)
-    [[ -x "$BUILD_SOURCE/target/release/cli" && -x "$BUILD_SOURCE/target/release/manager" ]] || die 'Release binaries were not produced.'
-}
 backup_path() {
     local rel="$1" target backup
     target="$(install_path "$rel")"
@@ -325,7 +307,7 @@ rollback_changes() {
 declare -A BACKUP_HAD=()
 APPLIED_PATHS=()
 apply_package() (
-    trap 'status=$?; trap - ERR; rollback_binaries; rollback_changes; restore_kde_menu; exit "$status"' ERR
+    trap 'status=$?; trap - ERR; rollback_changes; restore_kde_menu; exit "$status"' ERR
     local sha="$1" manifest_file="$2" path source target mode
     APPLIED_PATHS=(); BACKUP_HAD=()
     mkdir -p "$TMP_DIR/backup"
@@ -343,7 +325,7 @@ apply_package() (
         [[ ! -d "$target" ]] || { rollback_changes; return 1; }
         mkdir -p -- "$(dirname -- "$target")"
         mode=0644
-        [[ "$path" == smart-actions-governor.sh || "$path" == scripts/smart-actions-launcher ]] && mode=0755
+        [[ "$path" == bin/* || "$path" == smart-actions-governor.sh || "$path" == scripts/smart-actions-launcher ]] && mode=0755
         install -m "$mode" "$source" "$TMP_DIR/apply-file" && mv -f -- "$TMP_DIR/apply-file" "$target" || { rollback_changes; return 1; }
     done
     for path in "${REMOVED_PATHS[@]}"; do
@@ -353,29 +335,21 @@ apply_package() (
         backup_path "$path"
         rm -f -- "$target" || { rollback_changes; return 1; }
     done
-    if [[ "$BUILD_REQUIRED" == 1 ]]; then
-        for path in "$BIN_DIR/smart-actions" "$BIN_DIR/smart-actions-manager"; do
-            local key="@binary:${path##*/}"
-            if [[ -e "$path" ]]; then cp -a "$path" "$TMP_DIR/backup/${key#@}"; BACKUP_HAD["$key"]=1; else BACKUP_HAD["$key"]=0; fi
-        done
-        install -m 0755 "$BUILD_SOURCE/target/release/cli" "$TMP_DIR/cli-new" && mv -f "$TMP_DIR/cli-new" "$BIN_DIR/smart-actions" || { rollback_binaries; rollback_changes; return 1; }
-        install -m 0755 "$BUILD_SOURCE/target/release/manager" "$TMP_DIR/manager-new" && mv -f "$TMP_DIR/manager-new" "$BIN_DIR/smart-actions-manager" || { rollback_binaries; rollback_changes; return 1; }
-    fi
     local link_created=0 link_tmp="$PUBLIC_BIN/.smart-actions-link.$$"
     if [[ ! -e "$PUBLIC_BIN/smart-actions" && ! -L "$PUBLIC_BIN/smart-actions" ]]; then
-        ln -s "$BIN_DIR/smart-actions" "$link_tmp" && mv -f -- "$link_tmp" "$PUBLIC_BIN/smart-actions" || { rm -f -- "$link_tmp"; rollback_binaries; rollback_changes; return 1; }
+        ln -s "$BIN_DIR/smart-actions" "$link_tmp" && mv -f -- "$link_tmp" "$PUBLIC_BIN/smart-actions" || { rm -f -- "$link_tmp"; rollback_changes; return 1; }
         link_created=1
     fi
     if [[ "$MENU_REQUIRED" == 1 && ( "$desktop_hint" =~ [Kk][Dd][Ee] || "${XDG_CURRENT_DESKTOP:-}" =~ [Kk][Dd][Ee] ) ]]; then
         if ! regenerate_kde_menu; then
             ((link_created == 0)) || rm -f -- "$PUBLIC_BIN/smart-actions"
-            rollback_binaries; rollback_changes; return 1
+            rollback_changes; return 1
         fi
     fi
     local staged_manifest="$STATE_DIR/installed-manifest.sha256.tmp" staged_sha="$STATE_DIR/installed-sha.tmp"
     if ! install -m 0644 "$manifest_file" "$staged_manifest" || ! printf '%s\n' "$sha" > "$staged_sha"; then
         ((link_created == 0)) || rm -f -- "$PUBLIC_BIN/smart-actions"
-        rollback_binaries; rollback_changes; restore_kde_menu; return 1
+        rollback_changes; restore_kde_menu; return 1
     fi
     local previous_sha="$TMP_DIR/previous-installed-sha"
     [[ ! -f "$STATE_DIR/installed-sha" ]] || cp -p "$STATE_DIR/installed-sha" "$previous_sha"
@@ -383,26 +357,17 @@ apply_package() (
         rm -f -- "$staged_manifest" "$staged_sha"
         if [[ -f "$previous_sha" ]]; then cp -p "$previous_sha" "$STATE_DIR/installed-sha"; else rm -f -- "$STATE_DIR/installed-sha"; fi
         ((link_created == 0)) || rm -f -- "$PUBLIC_BIN/smart-actions"
-        rollback_binaries; rollback_changes; restore_kde_menu; return 1
+        rollback_changes; restore_kde_menu; return 1
     fi
 )
-rollback_binaries() {
-    [[ "$BUILD_REQUIRED" == 1 ]] || return 0
-    local path key backup
-    for path in "$BIN_DIR/smart-actions" "$BIN_DIR/smart-actions-manager"; do
-        key="@binary:${path##*/}"
-        backup="$TMP_DIR/backup/${key#@}"
-        [[ -v BACKUP_HAD["$key"] ]] || continue
-        if [[ "${BACKUP_HAD[$key]:-0}" == 1 ]]; then cp -a "$backup" "$path"; else rm -f -- "$path"; fi
-    done
-}
 prepare_remote_plan() {
     local repair="$1"
+    detect_platform
     if [[ "$repair" == 1 ]]; then
         REMOTE_SHA="$(installed_sha)"
         [[ "$REMOTE_SHA" =~ ^[0-9a-fA-F]{40}$ ]] || die 'Repair requires a valid installed commit. Use install to establish an installation.'
     else
-        REMOTE_SHA="$(resolve_remote_sha)" || die 'Could not determine the published main commit.'
+        REMOTE_SHA="$(resolve_remote_sha)" || die 'Nenhuma Release oficial compatível disponível (esperada tag sa-COMMIT).'
     fi
     [[ "$REMOTE_SHA" =~ ^[0-9a-fA-F]{40}$ ]] || die 'GitHub returned an invalid commit SHA.'
     load_remote_manifest "$REMOTE_SHA" "$TMP_DIR/remote-manifest.sha256"
@@ -452,6 +417,9 @@ regenerate_kde_menu() {
 }
 run_distribution() {
     local operation="$1" repair="$2" current prompt path
+    for program in curl sha256sum uname cut sort sed grep dirname readlink rm ln install mv cp mkdir mktemp flock; do
+        have "$program" || die "Dependência necessária não encontrada: $program"
+    done
     have flock || die 'flock is required to serialize installation operations.'
     [[ ! -L "$STATE_DIR" ]] || die 'Symbolic-link state directory'
     mkdir -p "$STATE_DIR"
@@ -467,14 +435,13 @@ run_distribution() {
     if [[ "$operation" == update ]]; then
         printf 'Nova atualização disponível\n'
         manifest_counts
-        printf -v prompt 'Nova atualização disponível\n\nArquivos novos: %d\nArquivos alterados: %d\nArquivos removidos: %d\nRecompilação necessária: %s\n\nAtualizar agora?' \
-            "${#NEW_PATHS[@]}" "${#CHANGED_PATHS[@]}" "${#REMOVED_PATHS[@]}" "$([[ "$BUILD_REQUIRED" == 1 ]] && printf Sim || printf Não)"
+        printf -v prompt 'Nova atualização disponível\n\nArquivos novos: %d\nArquivos alterados: %d\nArquivos removidos: %d\n\nAtualizar agora?' \
+            "${#NEW_PATHS[@]}" "${#CHANGED_PATHS[@]}" "${#REMOVED_PATHS[@]}"
         if ! ui_confirm "$prompt"; then printf 'Atualização cancelada.\n'; return 0; fi
     fi
     for path in "${FETCH_PATHS[@]}" "${REMOVED_PATHS[@]}"; do ensure_safe_destination "$path"; done
     ui_progress 'Baixando somente os arquivos novos ou alterados'
     download_paths "$REMOTE_SHA"
-    if [[ "$BUILD_REQUIRED" == 1 ]]; then prepare_build; fi
     apply_package "$REMOTE_SHA" "$TMP_DIR/remote-manifest.sha256"
     if [[ "$desktop_hint" =~ [Kk][Dd][Ee] || "${XDG_CURRENT_DESKTOP:-}" =~ [Kk][Dd][Ee] ]]; then
         ui_info 'Smart Actions installed. Administrative interface: available. KDE/Dolphin integration: configured.'
@@ -510,7 +477,7 @@ do_doctor() {
     printf 'Installed SHA: %s\n' "$(installed_sha)"
     printf 'Desktop: %s\n' "${XDG_CURRENT_DESKTOP:-${XDG_SESSION_DESKTOP:-${DESKTOP_SESSION:-unknown}}}"
     printf 'Dialog backend: %s\n' "$UI_BACKEND"
-    for program in curl sha256sum cargo; do if have "$program"; then printf '%s: available\n' "$program"; else printf '%s: missing\n' "$program"; fi; done
+    for program in curl sha256sum; do if have "$program"; then printf '%s: available\n' "$program"; else printf '%s: missing\n' "$program"; fi; done
     for program in kdialog zenity; do if have "$program"; then printf '%s: available (optional UI backend)\n' "$program"; else printf '%s: unavailable (optional UI backend)\n' "$program"; fi; done
     if [[ -x "$BIN_DIR/smart-actions" ]]; then printf 'CLI: installed\n'; else printf 'CLI: missing\n'; fi
     if [[ "$desktop_hint" =~ [Kk][Dd][Ee] ]]; then printf 'File manager integration: KDE/Dolphin supported\n'; else printf 'File manager integration: not available for this desktop in this version\n'; fi

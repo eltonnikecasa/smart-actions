@@ -46,9 +46,12 @@ pub fn execute_pipeline(
             cmd.arg(output);
 
             cmd.status()
-                .expect(
-                    "Failed to execute ffmpeg"
-                )
+                .unwrap_or_else(|error| {
+                    if error.kind() == std::io::ErrorKind::NotFound {
+                        panic!("Dependência necessária não encontrada: ffmpeg");
+                    }
+                    panic!("Falha ao executar ffmpeg: {error}");
+                })
         }
 
         "img2pdf" => {
@@ -66,9 +69,12 @@ pub fn execute_pipeline(
             cmd.arg(output);
 
             cmd.status()
-                .expect(
-                    "Failed to execute img2pdf"
-                )
+                .unwrap_or_else(|error| {
+                    if error.kind() == std::io::ErrorKind::NotFound {
+                        panic!("Dependência necessária não encontrada: img2pdf");
+                    }
+                    panic!("Falha ao executar img2pdf: {error}");
+                })
         }
 
         "qpdf" => {
@@ -91,9 +97,12 @@ pub fn execute_pipeline(
             cmd.arg(output);
 
             cmd.status()
-            .expect(
-                "Failed to execute qpdf"
-            )
+            .unwrap_or_else(|error| {
+                    if error.kind() == std::io::ErrorKind::NotFound {
+                        panic!("Dependência necessária não encontrada: qpdf");
+                    }
+                    panic!("Falha ao executar qpdf: {error}");
+                })
         }
 
         "ghostscript" => {
@@ -118,9 +127,12 @@ pub fn execute_pipeline(
             }
 
             cmd.status()
-                .expect(
-                    "Failed to execute ghostscript"
-                )
+                .unwrap_or_else(|error| {
+                    if error.kind() == std::io::ErrorKind::NotFound {
+                        panic!("Dependência necessária não encontrada: gs");
+                    }
+                    panic!("Falha ao executar ghostscript: {error}");
+                })
         }
 
         _ => {

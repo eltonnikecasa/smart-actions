@@ -19,21 +19,36 @@ cp "$ROOT/presets/video/resolve-safe.yaml" "$CONFIG_DIR/presets/personal.yaml"
 revision=1
 prepare_remote_plan() {
     REMOTE_SHA=$(printf '%040d' "$revision")
-    cp "$ROOT/smart-actions-manifest.sha256" "$TMP_DIR/remote-manifest.sha256"
+    {
+        for rel in smart-actions-governor.sh scripts/smart-actions-launcher; do printf '%s  %s\n' "$(sha256_file "$ROOT/$rel")" "$rel"; done
+        for rel in cli manager; do
+            name=smart-actions; [[ "$rel" != manager ]] || name=smart-actions-manager
+            printf '%s  bin/%s\n' "$(sha256_file "$ROOT/target/release/$rel")" "$name"
+        done
+        git -C "$ROOT" ls-files assets/icons lang presets | while IFS= read -r rel; do
+            valid_manifest_path "$rel" && printf '%s  %s\n' "$(sha256_file "$ROOT/$rel")" "$rel"
+        done
+    } > "$TMP_DIR/remote-manifest.sha256"
     manifest_load "$TMP_DIR/remote-manifest.sha256" REMOTE_MAP
     OLD_MAP=()
     if [[ -f "$INSTALLED_MANIFEST" ]]; then manifest_load "$INSTALLED_MANIFEST" OLD_MAP; fi
     manifest_plan "$1"
 }
-fetch_raw() { mkdir -p "$(dirname -- "$3")"; cp "$ROOT/$2" "$3"; }
-# Exercise the real build invocation, without recompiling every lifecycle operation.
-cargo() {
-    [[ "$*" == $'build\n--release\n--workspace\n-j\n15' ]] || fail 'unexpected Cargo job limit'
-    mkdir -p target/release
-    cp "$ROOT/target/release/cli" target/release/cli
-    cp "$ROOT/target/release/manager" target/release/manager
-    printf 'build\n' >> "$TMP/builds"
+fetch_raw() {
+    local source="$ROOT/$2"
+    case "$2" in bin/smart-actions) source="$ROOT/target/release/cli" ;; bin/smart-actions-manager) source="$ROOT/target/release/manager" ;; esac
+    cp "$source" "$3"
 }
+# Isolated client PATH has no Rust toolchain. Any attempted invocation fails.
+mkdir -p "$TMP/client-path"
+for dir in /usr/bin /bin; do
+    for executable in "$dir"/*; do
+        case "${executable##*/}" in cargo*|rustc*|rustup*) continue ;; esac
+        [[ ! -x "$executable" || -d "$executable" || -e "$TMP/client-path/${executable##*/}" ]] || ln -s "$executable" "$TMP/client-path/"
+    done
+done
+export PATH="$TMP/client-path"
+! command -v cargo && ! command -v rustc || fail 'toolchain present in client PATH'
 check_personal() {
     cmp "$TMP/personal" "$menu_dir/smart-actions-personal.desktop"
     cmp "$ROOT/presets/video/resolve-safe.yaml" "$CONFIG_DIR/presets/personal.yaml"
@@ -45,16 +60,16 @@ mapfile -d '' -t official < <(owned_kde_menus)
 # An old owned menu is removed during a necessary regeneration.
 printf 'X-Smart-Actions-Owner=%s\n' "$APP_DIR" > "$menu_dir/smart-actions-obsolete.desktop"
 # Simulate previous-version metadata to trigger a real update of the generator.
-sed -i '/  crates\/action_core\/src\/kde.rs$/s/^[a-f0-9]\{64\}/0000000000000000000000000000000000000000000000000000000000000000/' "$INSTALLED_MANIFEST"
+sed -i '/  bin\/smart-actions$/s/^[a-f0-9]\{64\}/0000000000000000000000000000000000000000000000000000000000000000/' "$INSTALLED_MANIFEST"
 revision=2
 do_update
 check_personal
 [[ ! -e "$menu_dir/smart-actions-obsolete.desktop" ]] || fail 'obsolete owned menu survived'
-# Repair must detect actual changed source bytes and regenerate integration.
-printf '\n// corruption\n' >> "$(install_path crates/action_core/src/kde.rs)"
+# Repair must detect actual changed binary bytes and regenerate integration.
+printf 'corruption' > "$(install_path bin/smart-actions)"
 do_repair
 check_personal
-[[ $(wc -l < "$TMP/builds") == 3 ]] || fail 'build mock did not exercise all flows'
+
 # A same-name unowned file must not be overwritten, even by the Rust generator.
 collision="${official[0]}"
 printf 'unowned collision\n' > "$collision"
@@ -73,4 +88,4 @@ do_uninstall
 check_personal
 cmp "$collision" "$TMP/collision"
 [[ -z $(owned_kde_menus) ]] || fail 'official menus survived uninstall'
-printf 'PASS: install/update/repair/uninstall preserve personal menus and presets; ownership, collision and 15-job checks passed\n'
+printf 'PASS: install/update/repair/uninstall preserve personal menus and presets; ownership, collision and client without Cargo/rustc checks passed\n'

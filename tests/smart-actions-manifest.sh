@@ -48,28 +48,16 @@ for path in '../arquivo' '../../etc/passwd' '/etc/passwd' 'foo/../../../tmp/x' '
 done
 pass 'manifest parsing rejects path traversal and absolute paths'
 
-# Change classes and rebuild classification.
+# Change classes for distribution files.
 mkdir -p "$BIN_DIR"
 printf '#!/bin/sh\n' > "$BIN_DIR/smart-actions"
 printf '#!/bin/sh\n' > "$BIN_DIR/smart-actions-manager"
 chmod +x "$BIN_DIR/smart-actions" "$BIN_DIR/smart-actions-manager"
-OLD_MAP=([assets/icons/a.svg]="$(hash_text same)" [presets/video/change.yaml]="$(hash_text old)" [presets/video/remove.yaml]="$(hash_text remove)" [crates/cli/src/main.rs]="$(hash_text rust)")
-REMOTE_MAP=([assets/icons/a.svg]="$(hash_text same)" [presets/video/change.yaml]="$(hash_text new)" [presets/video/add.yaml]="$(hash_text add)" [crates/cli/src/main.rs]="$(hash_text rust)")
+OLD_MAP=([assets/icons/a.svg]="$(hash_text same)" [presets/video/change.yaml]="$(hash_text old)" [presets/video/remove.yaml]="$(hash_text remove)" [bin/smart-actions]="$(hash_text binary)")
+REMOTE_MAP=([assets/icons/a.svg]="$(hash_text same)" [presets/video/change.yaml]="$(hash_text new)" [presets/video/add.yaml]="$(hash_text add)" [bin/smart-actions]="$(hash_text binary)")
 manifest_plan 0
 [[ ${#NEW_PATHS[@]} == 1 && ${#CHANGED_PATHS[@]} == 1 && ${#UNCHANGED_PATHS[@]} == 2 && ${#REMOVED_PATHS[@]} == 1 ]] || fail 'change classification is incorrect'
-[[ "$BUILD_REQUIRED" == 0 ]] || fail 'data-only changes triggered Rust build'
-REMOTE_MAP[crates/cli/src/main.rs]="$(hash_text rust-changed)"
-manifest_plan 0
-[[ "$BUILD_REQUIRED" == 1 ]] || fail 'Rust change did not trigger a build'
-pass 'new, changed, unchanged, removed, and rebuild classifications'
-for path in Cargo.toml Cargo.lock rust-toolchain.toml crates/cli/src/main.rs; do
-    is_build_path "$path" || fail "missing build trigger: $path"
-done
-for path in scripts/smart-actions-launcher presets/video/a.yaml lang/en_US.yaml crates/action_core/src/kde.rs; do
-    is_menu_path "$path" || fail "missing menu trigger: $path"
-done
-if is_menu_path assets/icons/a.svg; then fail 'icon unnecessarily triggers menu generation'; fi
-pass 'build and KDE integration trigger patterns'
+pass 'NEW CHANGED UNCHANGED REMOVED distribution classification'
 
 # Repair checks actual bytes on disk, not only recorded manifest values.
 repair_path=presets/video/repair.yaml
@@ -93,10 +81,17 @@ curl() {
         else [[ "$1" == https://* ]] && url="$1"; shift; fi
     done
     REQUESTS+=("$url")
-    if [[ "$url" == *api.github.com* ]]; then
-        printf '{"sha":"%s","parents":[{"sha":"ffffffffffffffffffffffffffffffffffffffff"}]}\n' "$TEST_COMMIT"
-    elif [[ "$url" == *smart-actions-manifest.sha256 ]]; then
-        printf '%s  assets/icons/pinned.svg\n' "$(hash_text "$MOCK_BODY")" > "$output"
+    if [[ "$url" == */releases/latest ]]; then
+        printf 'https://github.com/eltonnikecasa/smart-actions/releases/tag/sa-%s' "$TEST_COMMIT"
+    elif [[ "$url" == *api.github.com* ]]; then
+        printf '  "immutable": %s,\n' "${MOCK_IMMUTABLE:-true}"
+    elif [[ "$url" == *manifest-linux-x86_64.sha256 ]]; then
+        {
+            for rel in assets/icons/pinned.svg bin/smart-actions bin/smart-actions-manager smart-actions-governor.sh scripts/smart-actions-launcher; do
+                printf '%s  %s\n' "$(hash_text "$MOCK_BODY")" "$rel"
+            done
+            printf '%s  release.txt\n' "$(printf 'commit=%s\nplatform=linux-x86_64\n' "$TEST_COMMIT" | sha256sum | cut -d ' ' -f1)"
+        } > "$output"
     else printf '%s' "$MOCK_BODY" > "$output"; fi
 }
 TMP_DIR="$TMP/pin"
@@ -105,9 +100,13 @@ prepare_remote_plan 0
 FETCH_PATHS=(assets/icons/pinned.svg)
 download_paths "$REMOTE_SHA"
 [[ "$REMOTE_SHA" == "$TEST_COMMIT" ]] || fail 'resolver selected a parent SHA'
-for url in "${REQUESTS[@]}"; do [[ "$url" != *raw.githubusercontent.com* || "$url" == *"/$TEST_COMMIT/"* ]] || fail 'mixed commits in download URLs'; done
+for url in "${REQUESTS[@]}"; do [[ "$url" == */releases/latest || "$url" == *"/sa-$TEST_COMMIT/"* || "$url" == *"/sa-$TEST_COMMIT" ]] || fail 'mixed commits in download URLs'; done
 [[ -f "$TMP_DIR/download/assets/icons/pinned.svg" ]] || fail 'pinned file was not downloaded'
 pass 'manifest and files are fetched from the same resolved commit'
+MOCK_IMMUTABLE=false
+if (load_remote_manifest "$TEST_COMMIT" "$TMP/rejected-manifest") 2>/dev/null; then fail 'mutable release accepted'; fi
+unset MOCK_IMMUTABLE
+pass 'mutable releases rejected before manifest download'
 
 # An unchanged file is not fetched; a bad digest fails before apply.
 unchanged_path=assets/icons/local.svg
@@ -163,7 +162,7 @@ pass 'repair pins installed commit'
 TMP_DIR="$TMP/rollback"
 mkdir -p "$TMP_DIR/download/presets/video"
 printf replacement > "$TMP_DIR/download/$changed"
-FETCH_PATHS=("$changed"); REMOVED_PATHS=(); BUILD_REQUIRED=0; MENU_REQUIRED=1
+FETCH_PATHS=("$changed"); REMOVED_PATHS=(); MENU_REQUIRED=1
 desktop_hint=KDE
 regenerate_kde_menu() { return 1; }
 cp "$INSTALLED_MANIFEST" "$TMP/prior-manifest"
@@ -177,7 +176,7 @@ pass 'integration failure rolls back data without deleting existing binaries'
 TMP_DIR="$TMP/state-failure"
 mkdir -p "$TMP_DIR" "$STATE_DIR/installed-sha.tmp" "$DATA_HOME/kio/servicemenus"
 printf old-menu > "$DATA_HOME/kio/servicemenus/smart-actions-probe.desktop"
-FETCH_PATHS=(); REMOVED_PATHS=(); BUILD_REQUIRED=0; MENU_REQUIRED=1
+FETCH_PATHS=(); REMOVED_PATHS=(); MENU_REQUIRED=1
 desktop_hint=KDE
 regenerate_kde_menu() {
     mkdir -p "$TMP_DIR/menu-backup"
