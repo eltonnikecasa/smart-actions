@@ -34,9 +34,17 @@ cat > "$TMP/path/curl" <<'MOCK'
 set -eu
 url='' output=''
 while (($#)); do
-    if [[ "$1" == -o ]]; then output="$2"; shift 2
-    else [[ "$1" != https://* ]] || url="$1"; shift; fi
+    case "$1" in
+        -o) output="$2"; shift 2 ;;
+        --max-time|-w|-H) shift 2 ;;
+        --fail|--silent|--show-error|--location) shift ;;
+        https://*)
+            [[ -z "$url" ]] || { echo 'Multiple curl URLs' >&2; exit 1; }
+            url="$1"; shift ;;
+        *) echo "Unexpected curl argument: $1" >&2; exit 1 ;;
+    esac
 done
+[[ -n "$url" ]] || { echo 'Missing curl URL' >&2; exit 1; }
 printf '%s\n' "$url" >> "$REQUEST_LOG"
 case "$url" in
     https://github.com/eltonnikecasa/smart-actions/releases/latest)
