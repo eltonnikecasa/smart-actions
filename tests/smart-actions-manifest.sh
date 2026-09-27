@@ -13,6 +13,7 @@ hash_text() { printf '%s' "$1" | sha256sum | cut -d ' ' -f1; }
 # Deterministic allowlisted generation excludes personal state, target, and itself.
 FIXTURE="$TMP/project"
 mkdir -p "$FIXTURE/scripts" "$FIXTURE/crates/cli/src" "$FIXTURE/presets/video" "$FIXTURE/lang" "$FIXTURE/assets/icons" "$FIXTURE/target" "$FIXTURE/.config/smart-actions/presets"
+printf '# lock fixture\n' > "$FIXTURE/Cargo.lock"
 printf '[workspace]\n' > "$FIXTURE/Cargo.toml"
 printf '[package]\n' > "$FIXTURE/crates/cli/Cargo.toml"
 printf 'fn main() {}\n' > "$FIXTURE/crates/cli/src/main.rs"
@@ -35,6 +36,8 @@ git -C "$FIXTURE" add presets/custom
 manifest_generate "$FIXTURE" >/dev/null
 cmp -s "$TMP/first" "$FIXTURE/smart-actions-manifest.sha256" || fail 'manifest generation is nondeterministic'
 ! rg -q 'private.yaml|target/|smart-actions-manifest' "$FIXTURE/smart-actions-manifest.sha256" || fail 'personal/build/self file was included'
+(cd "$FIXTURE" && sha256sum -c smart-actions-manifest.sha256) >/dev/null
+rg -q '  Cargo.lock$' "$FIXTURE/smart-actions-manifest.sha256" || fail 'Cargo.lock absent'
 pass 'manifest generation is deterministic and excludes private/build files'
 
 # Reject traversal, absolute, malformed, and duplicate entries.

@@ -296,7 +296,7 @@ prepare_build() {
         fi
     done
     ui_progress 'Compilando versão de distribuição'
-    (cd "$BUILD_SOURCE" && cargo build --release --workspace)
+    (cd "$BUILD_SOURCE" && cargo build --release --workspace -j 15)
     [[ -x "$BUILD_SOURCE/target/release/cli" && -x "$BUILD_SOURCE/target/release/manager" ]] || die 'Release binaries were not produced.'
 }
 backup_path() {
@@ -417,10 +417,24 @@ prepare_remote_plan() {
     fi
     manifest_plan "$repair"
 }
+# The prefix is only a discovery filter; ownership requires an installation marker.
+owned_kde_menus() {
+    local path
+    for path in "$DATA_HOME/kio/servicemenus"/smart-actions-*.desktop; do
+        [[ -f "$path" && ! -L "$path" ]] || continue
+        if grep -Fxq -- "X-Smart-Actions-Owner=$APP_DIR" "$path"; then
+            printf '%s\0' "$path"
+        fi
+    done
+}
+remove_owned_kde_menus() {
+    local path
+    while IFS= read -r -d '' path; do rm -f -- "$path"; done < <(owned_kde_menus)
+}
 restore_kde_menu() {
     [[ -d "$TMP_DIR/menu-backup" ]] || return 0
     local menu_dir="$DATA_HOME/kio/servicemenus" path
-    rm -f -- "$menu_dir"/smart-actions-*.desktop
+    remove_owned_kde_menus
     for path in "$TMP_DIR/menu-backup"/*.desktop; do
         [[ ! -f "$path" ]] || cp -p -- "$path" "$menu_dir/"
     done
@@ -428,14 +442,12 @@ restore_kde_menu() {
 regenerate_kde_menu() {
     local menu_dir="$DATA_HOME/kio/servicemenus" path
     mkdir -p "$menu_dir" "$TMP_DIR/menu-backup"
-    for path in "$menu_dir"/smart-actions-*.desktop; do
-        [[ -f "$path" ]] || continue
+    while IFS= read -r -d '' path; do
         cp -p -- "$path" "$TMP_DIR/menu-backup/"
-    done
-    rm -f -- "$menu_dir"/smart-actions-*.desktop
+    done < <(owned_kde_menus)
+    remove_owned_kde_menus
     if "$BIN_DIR/smart-actions" generate-kde-menu; then return 0; fi
-    rm -f -- "$menu_dir"/smart-actions-*.desktop
-    for path in "$TMP_DIR/menu-backup"/*.desktop; do [[ -f "$path" ]] && cp -p -- "$path" "$menu_dir/"; done
+    restore_kde_menu
     return 1
 }
 run_distribution() {
@@ -527,7 +539,7 @@ do_uninstall() {
     if [[ -L "$PUBLIC_BIN/smart-actions" && "$(readlink -- "$PUBLIC_BIN/smart-actions")" == "$BIN_DIR/smart-actions" ]]; then
         rm -f -- "$PUBLIC_BIN/smart-actions"
     fi
-    rm -f -- "$DATA_HOME/kio/servicemenus"/smart-actions-*.desktop
+    remove_owned_kde_menus
     rm -rf -- "$STATE_DIR"
     ui_info 'Smart Actions was removed. Personal configuration and presets were preserved.'
 }

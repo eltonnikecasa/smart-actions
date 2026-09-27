@@ -79,6 +79,12 @@ fn generate_menu_for_mime(
         "[Desktop Entry]\n"
     );
 
+    let owner = format!(
+        "X-Smart-Actions-Owner={}",
+        dirs::data_dir().unwrap().join("smart-actions").display()
+    );
+    desktop.push_str(&format!("{}\n", owner));
+
     desktop.push_str(
         "Type=Service\n"
     );
@@ -204,6 +210,9 @@ fn generate_menu_for_mime(
             safe_name
         );
 
+    // MIME values from personal presets must never escape the menu directory.
+    assert!(!filename.contains(['/', '\\', '\n', '\r']), "Unsafe KDE menu filename");
+
     let target = dirs::data_dir()
         .unwrap()
         .join("kio/servicemenus")
@@ -211,6 +220,16 @@ fn generate_menu_for_mime(
 
     fs::create_dir_all(target.parent().unwrap())
         .expect("Failed to create KDE service menu directory");
+
+    if fs::symlink_metadata(&target).is_ok() {
+        assert!(
+            !target.is_symlink()
+                && fs::read_to_string(&target)
+                    .map(|contents| contents.lines().any(|line| line == owner))
+                    .unwrap_or(false),
+            "Refusing to replace an unowned KDE menu: {:?}", target
+        );
+    }
 
     fs::write(&target, desktop)
         .expect("Failed to write menu");
