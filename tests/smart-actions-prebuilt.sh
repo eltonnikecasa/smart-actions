@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+if grep -nE '\[https?://.*\]\(https?://' "$ROOT/smart-actions-governor.sh"; then
+    printf 'FAIL: Markdown URL in Governor runtime\n' >&2
+    exit 1
+fi
+printf 'PASS: Governor runtime contains no Markdown URLs\n'
 TMP="$(mktemp -d)"
 export HOME="$TMP/home" XDG_DATA_HOME="$TMP/data" XDG_CONFIG_HOME="$TMP/config" XDG_STATE_HOME="$TMP/state" XDG_BIN_HOME="$TMP/bin" SMART_ACTIONS_TESTING=1
 mkdir -p "$HOME"
