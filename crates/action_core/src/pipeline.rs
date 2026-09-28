@@ -1,6 +1,7 @@
 use std::path::Path;
 
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::io::{BufRead, BufReader};
 
 use crate::preset::Preset;
 
@@ -44,6 +45,10 @@ pub fn execute_pipeline(
             }
 
             cmd.arg(output);
+
+            if std::env::var_os("SMART_ACTIONS_PROGRESS").is_some() {
+                return execute_ffmpeg(cmd, preset, inputs);
+            }
 
             cmd.status()
                 .unwrap_or_else(|error| {
@@ -202,4 +207,70 @@ pub fn run_action(
         inputs,
         output,
     );
+}
+
+// Progress is opt-in for the launcher; normal CLI output stays unchanged.
+fn execute_ffmpeg(mut cmd: Command, preset: &Preset, inputs: &[String]) {
+    let duration = if preset.menu.group != "image" && inputs.len() == 1 {
+        Command::new("ffprobe")
+            .args(["-v", "error", "-show_entries", "format=duration",
+                   "-of", "default=noprint_wrappers=1:nokey=1", "-i"])
+            .arg(&inputs[0])
+            .output().ok()
+            .filter(|output| output.status.success())
+            .and_then(|output| String::from_utf8(output.stdout).ok())
+            .and_then(|duration| duration.trim().parse::<f64>().ok())
+            .filter(|duration| duration.is_finite() && *duration > 0.0)
+    } else {
+        None
+    };
+    // These global flags only control reporting, not the encoded output.
+    cmd.args(["-progress", "pipe:1", "-nostats"]);
+    let mut child = cmd.stdout(Stdio::piped()).spawn()
+        .unwrap_or_else(|error| panic!("Falha ao executar ffmpeg: {error}"));
+    let mut previous = None;
+    let mut read_error = None;
+    for line in BufReader::new(child.stdout.take().unwrap()).lines() {
+        match line {
+            Ok(line) => {
+                if let Some(value) = progress_percent(&line, duration) {
+                    if previous.is_none_or(|old| value > old) {
+                        println!("SMART_ACTIONS_PROGRESS={value}");
+                        previous = Some(value);
+                    }
+                }
+            }
+            Err(error) => { read_error = Some(error); break; }
+        }
+    }
+    if read_error.is_some() {
+        let _ = child.kill();
+    }
+    let status = child.wait().expect("Falha ao aguardar ffmpeg");
+    if let Some(error) = read_error { panic!("Falha ao ler progresso: {error}"); }
+    assert!(status.success(), "Pipeline execution failed: {status}");
+}
+
+fn progress_percent(line: &str, duration: Option<f64>) -> Option<u32> {
+    let duration = duration.filter(|value| value.is_finite() && *value > 0.0)?;
+    let position = line.strip_prefix("out_time_us=")?.parse::<u64>().ok()?;
+    // 100 is reserved for successful process termination, not progress=end.
+    Some(((position as f64 / 1_000_000.0 / duration * 100.0) as u32).min(99))
+}
+
+#[cfg(test)]
+mod progress_tests {
+    use super::progress_percent;
+
+    #[test]
+    fn percentages_require_duration_and_position() {
+        assert_eq!(progress_percent("out_time_us=2500000", Some(10.0)), Some(25));
+        assert_eq!(progress_percent("out_time_us=10000000", Some(10.0)), Some(99));
+        for duration in [None, Some(0.0), Some(f64::NAN), Some(-1.0)] {
+            assert_eq!(progress_percent("out_time_us=1", duration), None);
+        }
+        for line in ["out_time_us=N/A", "out_time_us=-1", "progress=end"] {
+            assert_eq!(progress_percent(line, Some(10.0)), None);
+        }
+    }
 }

@@ -1,97 +1,139 @@
 #!/bin/bash
 
+# Each asynchronous job owns a process group, including the converter's children.
+set -m
 ARGS=("$@")
-
+(( ${#ARGS[@]} >= 2 )) || exit 1
 LAST_INDEX=$((${#ARGS[@]} - 1))
-
 ACTION="${ARGS[$LAST_INDEX]}"
-
 unset 'ARGS[$LAST_INDEX]'
-
-FILES=("${ARGS[@]}")
-
 CLI="$(dirname -- "$(readlink -f -- "$0")")/smart-actions"
 if [[ ! -x "$CLI" ]]; then
   printf 'Smart Actions CLI not found: %s\n' "$CLI" >&2
   exit 1
 fi
 
-TMP_LOG=$(mktemp)
-
-DBUS_INFO=$(kdialog \
-  --title "Smart Actions" \
-  --progressbar "Processing file..." 100)
-
-SERVICE=$(echo "$DBUS_INFO" | awk '{print $1}')
-PATH_DIALOG=$(echo "$DBUS_INFO" | awk '{print $2}')
-
-qdbus6 "$SERVICE" "$PATH_DIALOG" \
-  showCancelButton true >/dev/null 2>&1
-
-(
-  "$CLI" invoke "$ACTION" "${FILES[@]}" \
-    > "$TMP_LOG" 2>&1
-) &
-
-PID=$!
-
-VALUE=0
-
-while kill -0 $PID 2>/dev/null; do
-
-  sleep 1
-
-  VALUE=$((VALUE + 2))
-
-  if [ "$VALUE" -gt 95 ]; then
-    VALUE=95
+TMP_DIR=$(mktemp -d) || exit 1
+PID= UI_PID= SERVICE= PATH_DIALOG= QDBUS= FRONTEND=none
+close_progress() {
+  if [[ -n "$SERVICE" ]]; then
+    if ! "$QDBUS" "$SERVICE" "$PATH_DIALOG" close 2>>"$TMP_DIR/ui.log"; then
+      # Only the helper identified by this invocation's handle may be stopped.
+      if [[ "$SERVICE" =~ ^org\.kde\.kdialog-([0-9]+)$ ]]; then
+        kill "${BASH_REMATCH[1]}" 2>/dev/null || true
+      fi
+    fi
+    SERVICE=
   fi
+  if [[ -n "$UI_PID" ]]; then
+    if [[ "${1:-}" == success ]]; then
+      printf '100\n' >&4
+    else
+      kill "$UI_PID" 2>/dev/null || true
+    fi
+    exec 4>&-
+    wait "$UI_PID" 2>/dev/null || true
+    UI_PID=
+  fi
+}
+cleanup() {
+  if [[ -n "$PID" ]]; then
+    kill -- "-$PID" 2>/dev/null || true
+    wait "$PID" 2>/dev/null || true
+  fi
+  close_progress
+  exec 3>&-
+  rm -rf -- "$TMP_DIR"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM HUP
+trap '' PIPE
 
-  qdbus6 "$SERVICE" "$PATH_DIALOG" \
-    Set "" value "$VALUE" >/dev/null 2>&1
-
-  CANCELLED=$(
-    qdbus6 "$SERVICE" "$PATH_DIALOG" \
-      wasCancelled 2>/dev/null
-  )
-
-  if [ "$CANCELLED" = "true" ]; then
-
-    kill $PID 2>/dev/null
-
-    qdbus6 "$SERVICE" "$PATH_DIALOG" \
-      close >/dev/null 2>&1
-
-    kdialog --passivepopup \
-      "Operation cancelled." 3
-
-    rm -f "$TMP_LOG"
-
-    exit 1
+for candidate in qdbus6 qdbus qdbus-qt5 /usr/lib/qt6/bin/qdbus /usr/lib/qt5/bin/qdbus; do
+  if command -v "$candidate" >/dev/null 2>&1; then
+    QDBUS=$candidate
+    break
   fi
 done
-
-wait $PID
-
-EXIT_CODE=$?
-
-qdbus6 "$SERVICE" "$PATH_DIALOG" \
-  Set "" value 100 >/dev/null 2>&1
-
-sleep 0.3
-
-qdbus6 "$SERVICE" "$PATH_DIALOG" \
-  close >/dev/null 2>&1
-
-if [ "$EXIT_CODE" = "0" ]; then
-
-  kdialog --passivepopup \
-    "Operation completed." 3
-
-else
-
-  kdialog --error "$(cat "$TMP_LOG")"
-
+if command -v kdialog >/dev/null 2>&1 && [[ -n "$QDBUS" ]]; then
+  # Read the handle without waiting for EOF from any detached helper that
+  # inherits stdout (which can keep command substitution open).
+  if kdialog --title "Smart Actions" --progressbar "Processing file..." 0 \
+      >"$TMP_DIR/handle" 2>"$TMP_DIR/ui.log"; then
+    read -r SERVICE PATH_DIALOG <"$TMP_DIR/handle"
+    if [[ -n "$SERVICE" && -n "$PATH_DIALOG" ]] &&
+        "$QDBUS" "$SERVICE" "$PATH_DIALOG" showCancelButton true 2>>"$TMP_DIR/ui.log"; then
+      FRONTEND=kdialog
+    else
+      close_progress
+    fi
+  fi
+fi
+if [[ "$FRONTEND" == none ]] && command -v zenity >/dev/null 2>&1; then
+  mkfifo "$TMP_DIR/ui" || exit 1
+  exec 4<>"$TMP_DIR/ui" || exit 1
+  zenity --progress --title="Smart Actions" --text="Processing file..." \
+    --pulsate --auto-close <"$TMP_DIR/ui" 4>&- > /dev/null 2>>"$TMP_DIR/ui.log" &
+  UI_PID=$!
+  FRONTEND=zenity
 fi
 
-rm -f "$TMP_LOG"
+if [[ "$FRONTEND" == none ]]; then printf 'Processing file...\n' >&2; fi
+mkfifo "$TMP_DIR/progress" || exit 1
+exec 3<>"$TMP_DIR/progress" || exit 1
+SMART_ACTIONS_PROGRESS=1 "$CLI" invoke "$ACTION" "${ARGS[@]}" \
+  >"$TMP_DIR/progress" 2>"$TMP_DIR/log" 3>&- 4>&- &
+PID=$!
+update_progress() {
+  if [[ "$1" =~ ^SMART_ACTIONS_PROGRESS=([0-9]+)$ ]]; then
+    value=${BASH_REMATCH[1]}
+    if [[ "$FRONTEND" == kdialog ]]; then
+      "$QDBUS" "$SERVICE" "$PATH_DIALOG" Set "" maximum 100 2>>"$TMP_DIR/ui.log"
+      "$QDBUS" "$SERVICE" "$PATH_DIALOG" Set "" value "$value" 2>>"$TMP_DIR/ui.log"
+    elif [[ "$FRONTEND" == zenity ]]; then
+      # Pulsating Zenity has no switch to determinate mode; show real progress
+      # in its label while preserving its native busy indicator.
+      printf '# Processing file... %s%%\n' "$value" >&4
+    else
+      printf 'Processing file... %s%%\n' "$value" >&2
+    fi
+  else
+    printf '%s\n' "$1" >>"$TMP_DIR/log"
+  fi
+}
+while kill -0 "$PID" 2>/dev/null; do
+  # This wait is solely for responsiveness to cancellation of a silent process.
+  if IFS= read -r -t 0.2 line <&3; then update_progress "$line"; fi
+  cancelled=false
+  if [[ "$FRONTEND" == kdialog ]]; then
+    cancelled=$("$QDBUS" "$SERVICE" "$PATH_DIALOG" wasCancelled 2>>"$TMP_DIR/ui.log") || cancelled=true
+  elif [[ "$FRONTEND" == zenity ]] && ! kill -0 "$UI_PID" 2>/dev/null; then
+    cancelled=true
+  fi
+  if [[ "$cancelled" == true ]]; then
+    printf 'Operation cancelled.\n' >&2
+    exit 130
+  fi
+done
+wait "$PID"
+EXIT_CODE=$?
+PID=
+# Drain records already written before the process exited, without waiting.
+while IFS= read -r -t 0 line <&3; do
+  IFS= read -r line <&3 || break
+  update_progress "$line"
+done
+if (( EXIT_CODE == 0 )); then
+  update_progress SMART_ACTIONS_PROGRESS=100
+fi
+if (( EXIT_CODE == 0 )); then close_progress success; else close_progress; fi
+if (( EXIT_CODE != 0 )); then
+  cat "$TMP_DIR/log" >&2
+  if command -v kdialog >/dev/null 2>&1; then
+    kdialog --error "$(cat "$TMP_DIR/log")" 2>/dev/null
+  elif command -v zenity >/dev/null 2>&1; then
+    zenity --error --text="$(cat "$TMP_DIR/log")" 2>/dev/null
+  fi
+fi
+exit "$EXIT_CODE"
