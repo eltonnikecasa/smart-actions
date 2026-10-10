@@ -2,10 +2,28 @@
 
 ## Installation and maintenance
 
-Install the latest official immutable Linux x86_64 release (no Rust, rustc or Cargo required) with:
+Install the latest official immutable Linux x86_64 release (no Rust, rustc or Cargo required):
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/eltonnikecasa/smart-actions/main/smart-actions-governor.sh | bash
+```
+
+Update an existing installation:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/eltonnikecasa/smart-actions/main/smart-actions-governor.sh | bash -s -- update
+```
+
+Check the installed version:
+
+```sh
+smart-actions version
+```
+
+Repair an installation:
+
+```sh
+smart-actions repair
 ```
 
 The installed `smart-actions` command provides `install`, `update`, `check`, `repair`, `doctor`, `version`, and `uninstall`. KDE Plasma with Dolphin has service menu integration; other desktops can use the administration commands, while file manager integration is not yet available. Dialogs use `kdialog` on KDE, `zenity` when available, and otherwise the terminal.
